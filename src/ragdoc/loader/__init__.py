@@ -31,7 +31,7 @@ from pathlib import Path
 
 from ragdoc.artifacts import ExtractedDoc
 
-__all__ = ["Loader"]
+__all__ = ["Loader", "UnknownLoaderError", "register", "get", "names"]
 
 
 class Loader(ABC):
@@ -68,3 +68,8 @@ class Loader(ABC):
             to its 1-based page number.
         """
         raise NotImplementedError
+
+
+# Imported last: the registry (and the loaders it registers) import ``Loader``
+# from this module, so it must be defined before they load.
+from ragdoc.loader.registry import UnknownLoaderError, get, names, register  # noqa: E402
