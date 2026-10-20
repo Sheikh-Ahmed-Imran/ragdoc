@@ -1,12 +1,22 @@
-"""The offline attribution checks: ``locate`` and ``survive``.
+"""The attribution checks: ``locate``, ``survive`` and ``rank``.
 
-These are the first two of the backward checks the attribution engine runs
-against the artefacts the forward pipeline produced. They consume only
-extraction and chunking output (an :class:`~ragdoc.artifacts.ExtractedDoc` and a
-list of :class:`~ragdoc.artifacts.Chunk`), so they are *offline*: no embedding
-model, no network, no cost (``.ai/constitution.md`` — no network calls in the
-extraction and chunking stages; spec Scope). ``rank`` (retrieval) and the final
-verdict composition are a later task (T-006).
+These are the backward checks the attribution engine runs against the artefacts
+the forward pipeline produced, one per attribution stage:
+
+* ``locate`` (extraction) and ``survive`` (chunking) consume only extraction and
+  chunking output (an :class:`~ragdoc.artifacts.ExtractedDoc` and a list of
+  :class:`~ragdoc.artifacts.Chunk`), so they are *offline*: no embedding model,
+  no network, no cost (``.ai/constitution.md`` — no network calls in the
+  extraction and chunking stages; spec Scope).
+* ``rank`` (retrieval) consumes the retrieval artefact — a precomputed
+  :class:`~ragdoc.artifacts.Ranking` produced by the retriever — and does no
+  embedding or network work itself: it only *reads* the ranking to find the
+  target chunk's position and compares it to ``top_k``. The scoring already
+  happened upstream in the retriever (T-005).
+
+The rule that turns these three check results into a single verdict naming one
+stage lives in :mod:`ragdoc.attribution.verdict`, not here; a check only ever
+reports on its own stage.
 
 Two rules from the project's decisions shape what these checks are allowed to
 do:
@@ -33,9 +43,9 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
-from ragdoc.artifacts import CharSpan, CheckResult, Chunk, ExtractedDoc
+from ragdoc.artifacts import CharSpan, CheckResult, Chunk, ExtractedDoc, Ranking
 
-__all__ = ["locate", "survive"]
+__all__ = ["locate", "survive", "rank"]
 
 
 # --------------------------------------------------------------------------- #
@@ -234,3 +244,75 @@ def survive(located_span: CharSpan, chunks: Sequence[Chunk]) -> CheckResult:
             "crossing_chunk_spans": [c.span for c in overlapping],
         },
     )
+
+
+# --------------------------------------------------------------------------- #
+# rank
+# --------------------------------------------------------------------------- #
+
+def rank(target_chunk_id: str, ranking: Ranking, top_k: int) -> CheckResult:
+    """Find the target chunk's position in the full ranking and compare to ``top_k``.
+
+    This is the ``retrieval`` check. It does no embedding and no scoring of its
+    own — the retriever (T-005) already produced the full :class:`Ranking` over
+    *every* chunk; ``rank`` only reads the target chunk's absolute position out of
+    it and asks whether that position is inside ``top_k``.
+
+    The target chunk is the one ``survive`` found the answer in
+    (``evidence["target_chunk_id"]``). Working from the chunk the answer actually
+    survived into — rather than re-deciding relevance — is what keeps the
+    diagnosis grounded in the user's asserted answer and not in an inferred
+    golden chunk (``.ai/constitution.md``; ADR-002).
+
+    A ``fail`` here is only the *observed symptom* — "the right chunk ranked below
+    the cutoff". Whether that symptom is attributed to retrieval or re-attributed
+    upstream to chunking (the unembedded-heading case) is the verdict
+    composition's job, which reads ``survive``'s ``context_missing`` flag
+    alongside this result (``.ai/domain/domain.md``;
+    :mod:`ragdoc.attribution.verdict`).
+
+    Args:
+        target_chunk_id: id of the chunk the answer survived into (from
+            ``survive``'s evidence).
+        ranking: the full, best-first ranking over every chunk.
+        top_k: the cutoff the normal retrieval path would apply (from
+            ``RunConfig.top_k``).
+
+    Returns:
+        * ``unevaluated`` if the ranking is empty, or if the target chunk is
+          absent from it (an inconsistency between the chunk list and the
+          ranking — the verdict is withheld rather than guessed).
+        * ``fail`` if the target's 1-based position is greater than ``top_k`` —
+          the normal retrieval path would not have returned it. Evidence carries
+          ``position``, ``total`` (``len(ranking)``), ``top_k`` and
+          ``target_chunk_id``, which the reporter renders as "ranked 23 of 400,
+          top_k=10".
+        * ``pass`` if the position is within ``top_k``. Evidence carries the same
+          keys, so a verdict can still cite the exact rank even when it passed.
+    """
+    total = len(ranking)
+    if total == 0:
+        return CheckResult.unevaluated(
+            "ranking is empty; nothing to locate the target chunk in"
+        )
+
+    position = ranking.position_of(target_chunk_id)
+    if position is None:
+        return CheckResult.unevaluated(
+            f"target chunk {target_chunk_id!r} is absent from the ranking; the "
+            "chunk list and the ranking are inconsistent"
+        )
+
+    evidence = {
+        "position": position,
+        "total": total,
+        "top_k": top_k,
+        "target_chunk_id": target_chunk_id,
+    }
+
+    if position > top_k:
+        return CheckResult.failed(
+            f"target chunk ranked {position} of {total}, outside top_k={top_k}",
+            evidence=evidence,
+        )
+    return CheckResult.passed(evidence=evidence)
