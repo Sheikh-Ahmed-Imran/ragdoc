@@ -10,10 +10,11 @@ readme = "README.md"
 # Pinned to 3.12: the embedding stack used from T-005 (sentence-transformers /
 # torch) does not reliably install on 3.14. Confirmed with the author.
 requires-python = ">=3.12,<3.13"
-# No runtime dependencies yet. The forward-pipeline stages add their own
-# (PyMuPDF in T-002, sentence-transformers in T-005); the types defined here
-# are pure stdlib so extraction/chunking stay installable and testable offline.
-dependencies = []
+# The loader (T-002) depends on PyMuPDF for extraction; the embedding stack
+# (sentence-transformers in T-005) is added later. The types in T-001 are pure
+# stdlib, so extraction/chunking stay installable and testable offline — PyMuPDF
+# reads PDFs locally and makes no network calls.
+dependencies = ["PyMuPDF>=1.24"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
