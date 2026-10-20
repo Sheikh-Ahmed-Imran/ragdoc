@@ -103,5 +103,6 @@ def render_report(verdict: Verdict, config: RunConfig) -> str:
         f"  overlap: {config.overlap}",
         f"  embedding model: {config.embedding_model}",
         f"  top_k: {config.top_k}",
+        f"  prepend_section_context: {config.prepend_section_context}",
     ]
     return "\n".join(lines)
