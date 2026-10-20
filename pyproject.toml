@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ragdoc"
+version = "0.0.0"
+description = "Headless diagnostic for PDF RAG pipelines: attributes a lost answer to the pipeline stage that lost it."
+readme = "README.md"
+# Pinned to 3.12: the embedding stack used from T-005 (sentence-transformers /
+# torch) does not reliably install on 3.14. Confirmed with the author.
+requires-python = ">=3.12,<3.13"
+# No runtime dependencies yet. The forward-pipeline stages add their own
+# (PyMuPDF in T-002, sentence-transformers in T-005); the types defined here
+# are pure stdlib so extraction/chunking stay installable and testable offline.
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
