@@ -1,20 +1,24 @@
-"""Command-line entry point: ``diagnose`` and ``compare`` one question against one PDF.
+"""Command-line entry point: ``diagnose``, ``compare`` and ``batch`` against one PDF.
 
 A thin wiring layer. It builds a :class:`RunConfig`, runs the stages in order
 (loader -> chunker -> indexer -> retriever -> engine -> reporter) and prints the
 report. Attribution, scoring and formatting all live in the components it calls;
 nothing in the engine imports this module (``.ai/constitution.md``).
 
-One question per invocation; batch mode is out of scope.
+``diagnose`` and ``compare`` take one question; ``batch`` takes one question set.
+One PDF and one configuration per invocation.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from typing import Optional, Sequence
 
 from ragdoc.attribution.verdict import build_engine, compose_verdict
+from ragdoc.batch import load_question_set
+from ragdoc.batch import run_batch as execute_batch
 from ragdoc.chunker import Chunker
 from ragdoc.compare import compare_loaders
 from ragdoc.config import RunConfig
@@ -22,10 +26,11 @@ from ragdoc.indexer.local_embeddings import LocalEmbeddingsIndexer
 from ragdoc.loader.pymupdf_loader import PyMuPDFLoader
 from ragdoc.loader import names as loader_names
 from ragdoc.report import render_report
+from ragdoc.report.batch import batch_to_json, render_batch_report
 from ragdoc.report.compare import render_comparison
 from ragdoc.retriever import Retriever
 
-__all__ = ["build_parser", "main", "run", "run_compare"]
+__all__ = ["build_parser", "main", "run", "run_batch", "run_compare"]
 
 _DEFAULTS = RunConfig()
 
@@ -50,30 +55,44 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("expected_answer", help="the answer text expected to be found in the PDF")
 
 
+def _add_config_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--chunk-size", type=int, default=_DEFAULTS.chunk_size,
+                        help="chunk size (default: %(default)s)")
+    parser.add_argument("--overlap", type=int, default=_DEFAULTS.overlap,
+                        help="chunk overlap (default: %(default)s)")
+    parser.add_argument("--prepend-section-context",
+                        action=argparse.BooleanOptionalAction,
+                        default=_DEFAULTS.prepend_section_context,
+                        help="prepend section path to chunk text before embedding "
+                             "(default: %(default)s)")
+    parser.add_argument("--embedding-model", default=_DEFAULTS.embedding_model,
+                        help="embedding model (default: %(default)s)")
+    parser.add_argument("--top-k", type=int, default=_DEFAULTS.top_k,
+                        help="retrieval cutoff (default: %(default)s)")
+
+
+def _config_from(args: argparse.Namespace) -> RunConfig:
+    return RunConfig(
+        chunk_size=args.chunk_size,
+        overlap=args.overlap,
+        prepend_section_context=args.prepend_section_context,
+        embedding_model=args.embedding_model,
+        top_k=args.top_k,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ragdoc",
         description="Diagnose which pipeline stage lost the answer to one question.",
     )
-    sub = parser.add_subparsers(dest="command", metavar="{diagnose,compare}")
+    sub = parser.add_subparsers(dest="command", metavar="{diagnose,compare,batch}")
 
     diagnose = sub.add_parser(
         "diagnose", help="diagnose which pipeline stage lost the answer",
     )
     _add_common(diagnose)
-    diagnose.add_argument("--chunk-size", type=int, default=_DEFAULTS.chunk_size,
-                          help="chunk size (default: %(default)s)")
-    diagnose.add_argument("--overlap", type=int, default=_DEFAULTS.overlap,
-                          help="chunk overlap (default: %(default)s)")
-    diagnose.add_argument("--prepend-section-context",
-                          action=argparse.BooleanOptionalAction,
-                          default=_DEFAULTS.prepend_section_context,
-                          help="prepend section path to chunk text before embedding "
-                               "(default: %(default)s)")
-    diagnose.add_argument("--embedding-model", default=_DEFAULTS.embedding_model,
-                          help="embedding model (default: %(default)s)")
-    diagnose.add_argument("--top-k", type=int, default=_DEFAULTS.top_k,
-                          help="retrieval cutoff (default: %(default)s)")
+    _add_config_flags(diagnose)
 
     compare = sub.add_parser(
         "compare", help="compare how each PDF loader extracts the expected answer",
@@ -81,17 +100,20 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(compare)
     compare.add_argument("--loaders", type=_loader_list, default=None, metavar="a,b",
                          help="comma-separated loader names (default: all registered)")
+
+    batch = sub.add_parser(
+        "batch", help="run a question set against one PDF and print the failure distribution",
+    )
+    batch.add_argument("pdf", help="path to the PDF")
+    batch.add_argument("questions", help="path to the JSON question set")
+    _add_config_flags(batch)
+    batch.add_argument("--json", dest="json_path", default=None, metavar="PATH",
+                       help="also write the structured result to this JSON file")
     return parser
 
 
 def run(args: argparse.Namespace) -> str:
-    config = RunConfig(
-        chunk_size=args.chunk_size,
-        overlap=args.overlap,
-        prepend_section_context=args.prepend_section_context,
-        embedding_model=args.embedding_model,
-        top_k=args.top_k,
-    )
+    config = _config_from(args)
     doc = PyMuPDFLoader().load(args.pdf)
     chunks = Chunker(config).chunk(doc)
     indexer = LocalEmbeddingsIndexer(config)
@@ -111,6 +133,20 @@ def run_compare(args: argparse.Namespace) -> str:
     return render_comparison(compare_loaders(args.pdf, args.expected_answer, args.loaders))
 
 
+def run_batch(args: argparse.Namespace) -> str:
+    config = _config_from(args)
+    pairs = load_question_set(args.questions)
+    result = execute_batch(args.pdf, config, pairs)
+    if args.json_path:
+        payload = json.dumps(batch_to_json(result), indent=2, ensure_ascii=False)
+        with open(args.json_path, "w", encoding="utf-8") as handle:
+            handle.write(payload + "\n")
+    return render_batch_report(result)
+
+
+_COMMANDS = {"diagnose": run, "compare": run_compare, "batch": run_batch}
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -118,7 +154,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         parser.print_help(sys.stderr)
         return 2
     try:
-        report = run_compare(args) if args.command == "compare" else run(args)
+        report = _COMMANDS[args.command](args)
     except (FileNotFoundError, ValueError) as exc:
         print(f"ragdoc: error: {exc}", file=sys.stderr)
         return 2
