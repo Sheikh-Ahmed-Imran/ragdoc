@@ -28,5 +28,22 @@
       "reason_code": null,
       "note": "Answer sits inside a single chunk and the document is short enough that it ranks inside top_k."
     }
+  ],
+  "_comparison_comment": "comparison_fixtures are for the v1 loader comparison only (locate across loaders); they are deliberately not in 'fixtures', which the attribution suite runs through the full pipeline. Ground truth asserted by hand.",
+  "comparison_fixtures": [
+    {
+      "name": "two_column",
+      "pdf": "two_column.pdf",
+      "question": "Within how many days must refund requests be submitted?",
+      "expected_answer": "Refund requests must be submitted within thirty days of the delivery date and must include the original order number so that finance can match the payment.",
+      "preserved_by": [
+        "pymupdf",
+        "pypdf"
+      ],
+      "not_preserved_by": [
+        "pdfplumber"
+      ],
+      "note": "Two text columns on the same baselines, left column drawn first. PyMuPDF and pypdf read in content-stream order so the left column stays contiguous; pdfplumber groups words by vertical position and joins the columns row by row, splitting the answer sentence. Natural divergence; no loader code was altered."
+    }
   ]
 }

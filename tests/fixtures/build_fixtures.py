@@ -239,10 +239,47 @@ def control_lines() -> list[str]:
     return lines
 
 
+# --------------------------------------------------------------------------- #
+# 4. two-column: loaders disagree about reading order (v1 comparison).
+# --------------------------------------------------------------------------- #
+
+TWO_COLUMN_QUESTION = "Within how many days must refund requests be submitted?"
+TWO_COLUMN_LEFT = [
+    "Refund requests must be submitted within",
+    "thirty days of the delivery date and",
+    "must include the original order number",
+    "so that finance can match the payment.",
+]
+TWO_COLUMN_RIGHT = [
+    "Office opening hours are eight until",
+    "six on working days. Visitors sign in",
+    "at the front desk and wait to be",
+    "escorted to the room by their host.",
+]
+TWO_COLUMN_ANSWER = " ".join(TWO_COLUMN_LEFT)
+
+
+def write_two_column(path: Path) -> None:
+    """Left column drawn first, then the right column, on the same baselines.
+
+    Content-stream order keeps each column contiguous (PyMuPDF, pypdf); a loader
+    that groups text by vertical position joins the columns row by row
+    (pdfplumber), which splits the answer sentence.
+    """
+    doc = pymupdf.open()
+    page = doc.new_page()
+    for x, column in ((50, TWO_COLUMN_LEFT), (320, TWO_COLUMN_RIGHT)):
+        for i, line in enumerate(column):
+            page.insert_text((x, 100 + 14 * i), line, fontsize=9, fontname="helv")
+    doc.save(path)
+    doc.close()
+
+
 def main(pad: str = HEADING_PAD) -> None:
     _write_pdf(HERE / "split_list.pdf", split_list_lines())
     _write_pdf(HERE / "unembedded_heading.pdf", unembedded_heading_lines(pad))
     _write_pdf(HERE / "control.pdf", control_lines())
+    write_two_column(HERE / "two_column.pdf")
 
 
 if __name__ == "__main__":
