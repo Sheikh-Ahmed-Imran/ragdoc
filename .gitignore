@@ -11,3 +11,6 @@ venv/
 
 # Task worktrees, created by the orchestrator
 .worktrees
+
+# Archify visual-check evidence (screenshots, contact sheet, sidecar json)
+docs/*.visual-check.*
