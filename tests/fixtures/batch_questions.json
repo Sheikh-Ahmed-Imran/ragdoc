@@ -1,0 +1,18 @@
+[
+  {
+    "question": "What are the five steps for onboarding a new supplier?",
+    "expected_answer": "1. Collect the signed supplier agreement and file a copy with procurement; 2. Verify the supplier tax registration against the national register; 3. Obtain two written trade references dated within the last year; 4. Complete the security questionnaire and have the risk team approve it; 5. Create the supplier record in the ledger and issue the vendor number."
+  },
+  {
+    "question": "What is the data retention policy for archived invoices?",
+    "expected_answer": "kept for seven years and then securely destroyed"
+  },
+  {
+    "question": "What is the maximum hotel allowance per night when travelling abroad?",
+    "expected_answer": "one hundred and twenty pounds per night"
+  },
+  {
+    "question": "How many days of annual leave do full-time employees receive?",
+    "expected_answer": "Full-time employees receive twenty-five days of annual leave"
+  }
+]

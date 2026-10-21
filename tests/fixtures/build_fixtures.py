@@ -275,11 +275,33 @@ def write_two_column(path: Path) -> None:
     doc.close()
 
 
+# --------------------------------------------------------------------------- #
+# 5. batch document: one PDF carrying several known-cause questions (v2 batch).
+#    Batch mode runs one document, so the unembedded-heading, split-list and
+#    control sections are joined into a single handbook. The unembedded-heading
+#    section comes first so its text keeps the offsets (and the chunk grid
+#    alignment) it has in its own fixture. The split list then starts at
+#    extracted char 6511 = 14 * 450 + 211: the 500-char chunk starting at 6300
+#    ends 211 chars into the list's 360, and the next chunk starts at 6750, after
+#    the list's start, so no chunk contains the whole list (boundary cut).
+# --------------------------------------------------------------------------- #
+
+
+def batch_doc_lines() -> list[str]:
+    lines = unembedded_heading_lines()
+    lines += [""]
+    lines += split_list_lines()
+    lines += [""]
+    lines += control_lines()
+    return lines
+
+
 def main(pad: str = HEADING_PAD) -> None:
     _write_pdf(HERE / "split_list.pdf", split_list_lines())
     _write_pdf(HERE / "unembedded_heading.pdf", unembedded_heading_lines(pad))
     _write_pdf(HERE / "control.pdf", control_lines())
     write_two_column(HERE / "two_column.pdf")
+    _write_pdf(HERE / "batch_doc.pdf", batch_doc_lines())
 
 
 if __name__ == "__main__":
