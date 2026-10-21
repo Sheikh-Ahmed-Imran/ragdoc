@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from ragdoc.loader import Loader
 from ragdoc.loader.pymupdf_loader import PyMuPDFLoader
+from ragdoc.loader.pypdf_loader import PyPDFLoader
 
 __all__ = ["UnknownLoaderError", "register", "get", "names"]
 
@@ -67,3 +68,4 @@ def names() -> list[str]:
 
 
 register(PyMuPDFLoader)
+register(PyPDFLoader)
