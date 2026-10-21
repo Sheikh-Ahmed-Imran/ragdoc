@@ -15,6 +15,7 @@ imports only from the loader package, keeping the stage boundary intact
 from __future__ import annotations
 
 from ragdoc.loader import Loader
+from ragdoc.loader.pdfplumber_loader import PdfPlumberLoader
 from ragdoc.loader.pymupdf_loader import PyMuPDFLoader
 
 __all__ = ["UnknownLoaderError", "register", "get", "names"]
@@ -67,3 +68,4 @@ def names() -> list[str]:
 
 
 register(PyMuPDFLoader)
+register(PdfPlumberLoader)
