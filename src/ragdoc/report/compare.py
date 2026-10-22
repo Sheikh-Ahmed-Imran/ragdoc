@@ -46,11 +46,39 @@ def _row(result: "LoaderResult") -> tuple[str, ...]:
     )
 
 
-def render_comparison(results: Sequence["LoaderResult"]) -> str:
+def _attempt(result: "LoaderResult") -> str:
+    if result.found:
+        return result.match or "found"
+    return "not found" if result.evaluated else "not evaluated (empty answer)"
+
+
+def _snippet(result: "LoaderResult") -> str:
+    head = result.text_head
+    if not head:
+        return "(no text extracted)"
+    # Escape control characters so the snippet stays on one line.
+    shown = head.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
+    text = f'"{shown}"'
+    if len(head) < result.char_count:
+        text += f" … ({len(head)} of {result.char_count} chars)"
+    return text
+
+
+def _verbose_block(results: Sequence["LoaderResult"]) -> list[str]:
+    lines: list[str] = []
+    for r in results:
+        lines += ["", r.loader, f"  match attempt: {_attempt(r)}", f"  extracted:     {_snippet(r)}"]
+    return lines
+
+
+def render_comparison(results: Sequence["LoaderResult"], verbose: bool = False) -> str:
     """Render one table row per loader; a miss is marked ``✗ MISS``.
 
     Pages are each loader's own numbering and are not comparable across rows
     by character position; no figure other than counts of extracted text is shown.
+
+    With ``verbose=True`` the table is followed by, per loader, the match
+    attempt and the bounded extraction snippet carried by the result.
     """
     if not results:
         return "No loaders were compared."
@@ -62,4 +90,6 @@ def render_comparison(results: Sequence["LoaderResult"]) -> str:
 
     lines = [fmt(rows[0]), "  ".join("-" * w for w in widths)]
     lines += [fmt(r) for r in rows[1:]]
+    if verbose:
+        lines += _verbose_block(results)
     return "\n".join(lines)
