@@ -218,5 +218,5 @@ def test_diagnose_and_compare_unchanged():
 
     two = _MANIFEST["comparison_fixtures"][0]
     out = cli.run_compare(cli.build_parser().parse_args(
-        ["compare", str(FIXTURES / two["pdf"]), two["question"], two["expected_answer"]]))
+        ["compare", str(FIXTURES / two["pdf"]), two["expected_answer"]]))
     assert "pymupdf" in out and "pypdf" in out and "pdfplumber" in out
