@@ -20,3 +20,6 @@ learning-artifacts/
 
 # Stray/local images, not test fixtures (fixtures are tests/fixtures/*.pdf)
 tests/images/
+
+# sdist build leftover (python -m build)
+/ragdoc-[0-9]*/
