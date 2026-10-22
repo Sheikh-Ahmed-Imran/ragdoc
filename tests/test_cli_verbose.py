@@ -5,7 +5,7 @@ import pytest
 from ragdoc import cli
 
 _DIAG = ["diagnose", "doc.pdf", "Q?", "A"]
-_CMP = ["compare", "doc.pdf", "Q?", "A"]
+_CMP = ["compare", "doc.pdf", "A"]
 
 
 @pytest.mark.parametrize("base", [_DIAG, _CMP])

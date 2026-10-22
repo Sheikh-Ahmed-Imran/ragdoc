@@ -5,7 +5,9 @@ A thin wiring layer. It builds a :class:`RunConfig`, runs the stages in order
 report. Attribution, scoring and formatting all live in the components it calls;
 nothing in the engine imports this module (``.ai/constitution.md``).
 
-``diagnose`` and ``compare`` take one question; ``batch`` takes one question set.
+``diagnose`` takes one question; ``compare`` takes none; ``batch`` takes one question
+set. ``diagnose`` and ``compare`` take the expected answer as an argument or from
+``--answer-file``.
 One PDF and one configuration per invocation.
 """
 
@@ -49,10 +51,33 @@ def _loader_list(value: str) -> list[str]:
     return requested
 
 
-def _add_common(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("pdf", help="path to the PDF")
-    parser.add_argument("question", help="the question to ask the pipeline")
-    parser.add_argument("expected_answer", help="the answer text expected to be found in the PDF")
+def _add_answer(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("expected_answer", nargs="?", default=None,
+                        help="the answer text expected to be found in the PDF "
+                             "(or use --answer-file)")
+    parser.add_argument("--answer-file", default=None, metavar="PATH",
+                        help="read the expected answer from this UTF-8 file "
+                             "instead of the command line")
+
+
+def _resolve_answer(args: argparse.Namespace) -> str:
+    positional = args.expected_answer
+    path = args.answer_file
+    if positional is not None and path is not None:
+        raise ValueError("give the expected answer either as an argument or with "
+                         "--answer-file, not both")
+    if path is not None:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                return handle.read().rstrip()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"answer file not found: {path}") from None
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ValueError(f"cannot read answer file {path}: {exc}") from None
+    if positional is None:
+        raise ValueError("no expected answer given: pass it as an argument or "
+                         "with --answer-file")
+    return positional
 
 
 def _add_config_flags(parser: argparse.ArgumentParser) -> None:
@@ -96,14 +121,17 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose = sub.add_parser(
         "diagnose", help="diagnose which pipeline stage lost the answer",
     )
-    _add_common(diagnose)
+    diagnose.add_argument("pdf", help="path to the PDF")
+    diagnose.add_argument("question", help="the question to ask the pipeline")
+    _add_answer(diagnose)
     _add_config_flags(diagnose)
     _add_verbose(diagnose)
 
     compare = sub.add_parser(
         "compare", help="compare how each PDF loader extracts the expected answer",
     )
-    _add_common(compare)
+    compare.add_argument("pdf", help="path to the PDF")
+    _add_answer(compare)
     compare.add_argument("--loaders", type=_loader_list, default=None, metavar="a,b",
                          help="comma-separated loader names (default: all registered)")
     _add_verbose(compare)
@@ -120,6 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> str:
+    expected_answer = _resolve_answer(args)
     config = _config_from(args)
     doc = PyMuPDFLoader().load(args.pdf)
     chunks = Chunker(config).chunk(doc)
@@ -127,7 +156,7 @@ def run(args: argparse.Namespace) -> str:
     indexer.index(chunks)
     ranking = Retriever(indexer, config).rank(args.question)
     result = build_engine().run(
-        expected_answer=args.expected_answer,
+        expected_answer=expected_answer,
         doc=doc,
         chunks=chunks,
         ranking=ranking,
@@ -138,7 +167,7 @@ def run(args: argparse.Namespace) -> str:
 
 def run_compare(args: argparse.Namespace) -> str:
     return render_comparison(
-        compare_loaders(args.pdf, args.expected_answer, args.loaders),
+        compare_loaders(args.pdf, _resolve_answer(args), args.loaders),
         verbose=args.verbose,
     )
 
