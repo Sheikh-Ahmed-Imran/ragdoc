@@ -14,3 +14,9 @@ venv/
 
 # Archify visual-check evidence (screenshots, contact sheet, sidecar json)
 docs/*.visual-check.*
+
+# Learning-session scaffolding (deletable; not part of the product)
+learning-artifacts/
+
+# Stray/local images, not test fixtures (fixtures are tests/fixtures/*.pdf)
+tests/images/
