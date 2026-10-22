@@ -25,8 +25,9 @@ do:
   searches the extracted text for the *exact* string the user supplied; it does
   not generate a golden answer and does not read retrieval scores to decide what
   "should" have been found (``.ai/constitution.md``; ADR-002). Matching is
-  verbatim, modulo whitespace — paraphrase is explicitly out of scope for v0
-  (spec Exclusions).
+  verbatim, modulo whitespace and letter case — paraphrase is explicitly out of
+  scope for v0 (spec Exclusions, narrowed only to case by the 2026-10-22
+  addendum).
 * **The chunk's source span is authoritative for survival, not its text.**
   ``survive`` decides whether an answer survived chunking by comparing *spans*
   (``CharSpan.contains``), never by fuzzy-matching chunk text, because the whole
@@ -53,10 +54,10 @@ __all__ = ["locate", "survive", "rank"]
 # --------------------------------------------------------------------------- #
 
 def _normalize_with_map(text: str) -> tuple[str, list[int]]:
-    """Whitespace-normalize ``text``, keeping a map back to original offsets.
+    """Whitespace-normalize and case-fold ``text``, keeping a map to original offsets.
 
     Every run of whitespace (spaces, tabs, newlines) collapses to a single
-    space. The returned ``offsets`` list is parallel to the normalized string:
+    space, and letters are lowercased. The returned ``offsets`` list is parallel to the normalized string:
     ``offsets[i]`` is the index in the *original* ``text`` of the character that
     produced normalized character ``i``. For a collapsed-whitespace space, that
     is the offset of the first whitespace character in the run.
@@ -76,22 +77,34 @@ def _normalize_with_map(text: str) -> tuple[str, list[int]]:
             norm_chars.append(" ")
             offsets.append(run_start)
         else:
-            norm_chars.append(text[i])
-            offsets.append(i)
+            # A character whose lowercase is several characters maps each of
+            # them back to the same original offset, so offsets stay valid.
+            for folded in _fold(text[i]):
+                norm_chars.append(folded)
+                offsets.append(i)
             i += 1
     return "".join(norm_chars), offsets
 
 
+def _fold(c: str) -> str:
+    """Lowercase one character; may yield more than one (e.g. ``"İ"``)."""
+    return c.lower()
+
+
 def _normalize(s: str) -> str:
-    """Collapse all whitespace runs to single spaces and strip the ends."""
-    return " ".join(s.split())
+    """Collapse whitespace runs to single spaces, strip the ends, fold case.
+
+    Case is folded per character (not ``str.lower()`` on the whole string) so the
+    answer folds exactly as ``_normalize_with_map`` folds the text.
+    """
+    return "".join(_fold(c) for c in " ".join(s.split()))
 
 
 def _find_span(text: str, answer: str) -> Optional[tuple[CharSpan, str]]:
     """Find ``answer`` in ``text``; return its span and the match kind, or None.
 
     Tries an exact substring match first (so the reported span is precise), then
-    falls back to a whitespace-normalized match, mapping the normalized match
+    falls back to a whitespace-normalized, case-insensitive match, mapping the normalized match
     position back onto the original text. ``answer`` is assumed non-empty.
 
     The match kind is ``"exact"`` or ``"normalized"``, carried in evidence so a
