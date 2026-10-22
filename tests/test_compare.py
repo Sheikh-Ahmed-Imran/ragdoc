@@ -115,6 +115,25 @@ def test_divergence_shows_in_report(no_network):
     assert "✗" not in rows["pymupdf"] + rows["pypdf"]
 
 
+def test_verbose_reveals_pdfplumber_miss_extraction(no_network):
+    """On two_column.pdf the verbose block shows the MISS loader's text differs."""
+    pdf, answer = _case("two_column")
+    results = compare_loaders(pdf, answer, ORDER)
+    by_name = {r.loader: r for r in results}
+    assert not by_name["pdfplumber"].found and by_name["pymupdf"].found
+    assert by_name["pdfplumber"].text_head != by_name["pymupdf"].text_head
+    plain = render_comparison(results)
+    out = render_comparison(results, verbose=True)
+    assert out.startswith(plain) and out != plain
+    blocks = {}
+    for chunk in out[len(plain):].strip().split("\n\n"):
+        lines = chunk.splitlines()
+        blocks[lines[0]] = lines[1:]
+    assert "not found" in blocks["pdfplumber"][0]
+    assert "exact" in blocks["pymupdf"][0] or "normalized" in blocks["pymupdf"][0]
+    assert blocks["pdfplumber"][1] != blocks["pymupdf"][1]
+
+
 def test_diagnose_reproduces_v0_verdict():
     """`diagnose` still blames chunking / boundary_cut on the split-list fixture."""
     pytest.importorskip("sentence_transformers")

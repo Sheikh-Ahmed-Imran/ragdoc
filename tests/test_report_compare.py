@@ -34,3 +34,31 @@ def test_no_metric_or_recommendation():
 
 def test_empty():
     assert "No loaders" in render_comparison([])
+
+
+def _verbose_results():
+    long = "x" * 300
+    return [
+        LoaderResult("pdfplumber", False, True, None, None, 5000, 2, text_head=long),
+        LoaderResult("pymupdf", True, True, 1, "exact", 12, 1, text_head="line one\nthe answer"),
+    ]
+
+
+def test_verbose_false_is_byte_identical_to_default():
+    results = _verbose_results()
+    assert render_comparison(results, verbose=False) == render_comparison(results)
+
+
+def test_verbose_includes_match_attempt_and_snippet():
+    results = _verbose_results()
+    out = render_comparison(results, verbose=True)
+    assert out.startswith(render_comparison(results))
+    assert "match attempt: not found" in out and "match attempt: exact" in out
+    assert "line one\\nthe answer" in out  # control characters escaped onto one line
+
+
+def test_verbose_snippet_is_bounded_with_truncation_indicator():
+    out = render_comparison(_verbose_results(), verbose=True)
+    assert "… (300 of 5000 chars)" in out
+    # a complete extraction carries no truncation indicator
+    assert "of 12 chars" not in out
