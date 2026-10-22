@@ -25,7 +25,10 @@ from typing import Optional, Sequence
 from ragdoc.attribution.checks import locate
 from ragdoc.loader import get, names
 
-__all__ = ["LoaderResult", "compare_loaders"]
+__all__ = ["LoaderResult", "TEXT_HEAD_MAX", "compare_loaders"]
+
+#: Maximum length of ``LoaderResult.text_head``.
+TEXT_HEAD_MAX = 240
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,8 @@ class LoaderResult:
         match: ``"exact"`` or ``"normalized"`` when found, else ``None``.
         char_count: length of the extracted text.
         page_count: number of pages in this loader's page map.
+        text_head: the first ``TEXT_HEAD_MAX`` characters of the extracted text
+            — a bounded sample, never the whole document.
     """
 
     loader: str
@@ -51,6 +56,7 @@ class LoaderResult:
     match: Optional[str]
     char_count: int
     page_count: int
+    text_head: str = ""
 
 
 def compare_loaders(
@@ -88,6 +94,7 @@ def compare_loaders(
                 match=check.evidence.get("match") if found else None,
                 char_count=len(doc.text),
                 page_count=len(doc.page_map),
+                text_head=doc.text[:TEXT_HEAD_MAX],
             )
         )
     return results
