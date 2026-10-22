@@ -74,8 +74,61 @@ def _marker(report: StageReport) -> str:
     return _NOT_REACHED
 
 
-def render_report(verdict: Verdict, config: RunConfig) -> str:
-    """Render the four-row table, VERDICT, FIX and the run configuration."""
+def _span_text(span: object) -> str:
+    start, end = getattr(span, "start", None), getattr(span, "end", None)
+    if start is None or end is None:
+        return str(span)
+    return f"[{start}, {end})"
+
+
+def _evidence_lines(report: StageReport) -> list[str]:
+    """Curated, labelled evidence beneath a stage row (verbose only).
+
+    A stage that was not reached or has no result adds nothing. Only a fixed
+    subset of keys is shown — never the raw evidence dict.
+    """
+    result = report.result
+    if result is None or report.status in (
+        CheckStatus.NOT_REACHED,
+        CheckStatus.UNEVALUATED,
+    ):
+        return []
+    ev = result.evidence
+    rows: list[tuple[str, str]] = []
+    if report.stage == "extraction":
+        if "span" in ev:
+            rows.append(("located span", _span_text(ev["span"])))
+        if "page" in ev:
+            rows.append(("page", str(ev["page"])))
+        if "snippet" in ev:
+            rows.append(("matched snippet", repr(ev["snippet"])))
+        if "match" in ev:
+            rows.append(("match kind", str(ev["match"])))
+    elif report.stage == "chunking":
+        if "context_missing" in ev:
+            rows.append(("context missing", "yes" if ev["context_missing"] else "no"))
+        if "target_chunk_id" in ev:
+            rows.append(("target chunk", str(ev["target_chunk_id"])))
+        if "section_path" in ev:
+            path = ev["section_path"]
+            rows.append(("section path", " > ".join(path) if path else "(none)"))
+        elif "crossing_chunk_ids" in ev:
+            rows.append(("crossing chunks", ", ".join(map(str, ev["crossing_chunk_ids"]))))
+    elif report.stage == "retrieval":
+        for key, label in (("position", "position"), ("total", "total"), ("top_k", "top_k")):
+            if key in ev:
+                rows.append((label, str(ev[key])))
+    return [f"      {label}: {value}" for label, value in rows]
+
+
+def render_report(
+    verdict: Verdict, config: RunConfig, verbose: bool = False
+) -> str:
+    """Render the four-row table, VERDICT, FIX and the run configuration.
+
+    With ``verbose=True`` each evaluated stage row is followed by a curated
+    subset of its check evidence; the default output is unchanged.
+    """
     top_k = config.top_k
     lines = []
     for report in verdict.stages:
@@ -85,6 +138,8 @@ def render_report(verdict: Verdict, config: RunConfig) -> str:
             marker, detail = _marker(report), _stage_detail(report, top_k)
         row = f"  {report.stage:<11} {marker}"
         lines.append(f"{row}  {detail}" if detail else row)
+        if verbose and report.stage != "generation":
+            lines += _evidence_lines(report)
 
     lines.append("")
     if verdict.withheld:
