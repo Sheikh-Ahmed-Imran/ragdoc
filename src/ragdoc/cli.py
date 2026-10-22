@@ -71,6 +71,11 @@ def _add_config_flags(parser: argparse.ArgumentParser) -> None:
                         help="retrieval cutoff (default: %(default)s)")
 
 
+def _add_verbose(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="also print the evidence behind each verdict")
+
+
 def _config_from(args: argparse.Namespace) -> RunConfig:
     return RunConfig(
         chunk_size=args.chunk_size,
@@ -93,6 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_common(diagnose)
     _add_config_flags(diagnose)
+    _add_verbose(diagnose)
 
     compare = sub.add_parser(
         "compare", help="compare how each PDF loader extracts the expected answer",
@@ -100,6 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(compare)
     compare.add_argument("--loaders", type=_loader_list, default=None, metavar="a,b",
                          help="comma-separated loader names (default: all registered)")
+    _add_verbose(compare)
 
     batch = sub.add_parser(
         "batch", help="run a question set against one PDF and print the failure distribution",
@@ -126,11 +133,14 @@ def run(args: argparse.Namespace) -> str:
         ranking=ranking,
         config=config,
     )
-    return render_report(compose_verdict(result), config)
+    return render_report(compose_verdict(result), config, verbose=args.verbose)
 
 
 def run_compare(args: argparse.Namespace) -> str:
-    return render_comparison(compare_loaders(args.pdf, args.expected_answer, args.loaders))
+    return render_comparison(
+        compare_loaders(args.pdf, args.expected_answer, args.loaders),
+        verbose=args.verbose,
+    )
 
 
 def run_batch(args: argparse.Namespace) -> str:
