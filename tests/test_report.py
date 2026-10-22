@@ -96,3 +96,31 @@ def test_precision_at_k_ceiling_is_one_over_k():
     outside, ceiling2 = precision_at_k(23, 5)
     assert outside == 0.0
     assert ceiling2 == 0.2
+
+
+def test_verbose_false_is_byte_identical_to_default():
+    verdict, config = _missing_context_verdict(), RunConfig(top_k=5)
+    assert render_report(verdict, config, verbose=False) == render_report(verdict, config)
+
+
+def test_verbose_adds_check_evidence():
+    verdict, config = _missing_context_verdict(), RunConfig(top_k=5)
+    plain = render_report(verdict, config)
+    out = render_report(verdict, config, verbose=True)
+    assert out != plain and len(out.splitlines()) > len(plain.splitlines())
+    assert "section path: 2. Methods > 2.1 Sampling" in out
+    assert "position: 23" in out and "total: 400" in out
+    assert "context missing: yes" in out
+
+
+def test_verbose_shows_extraction_span_and_page():
+    ok = CheckResult.passed({"span": (10, 25), "page": 3, "snippet": "the answer", "match": "exact"})
+    stages = (
+        StageReport("extraction", CheckStatus.PASS, ok),
+        StageReport("chunking", CheckStatus.NOT_REACHED, None),
+        StageReport("retrieval", CheckStatus.NOT_REACHED, None),
+        StageReport("generation", CheckStatus.NOT_REACHED, None),
+    )
+    verdict = Verdict(stage=None, reason_code=None, reason="", fix="", stages=stages)
+    out = render_report(verdict, RunConfig(), verbose=True)
+    assert "page: 3" in out and "the answer" in out and "match kind: exact" in out
