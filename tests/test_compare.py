@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from ragdoc.compare import compare_loaders
+from ragdoc.compare import TEXT_HEAD_MAX, compare_loaders
 from ragdoc.loader import UnknownLoaderError
 from ragdoc.report.compare import render_comparison
 
@@ -58,6 +58,15 @@ def test_found_has_page_and_match_and_absent_does_not():
         assert r.char_count > 0 and r.page_count >= 1
     for r in compare_loaders(pdf, "zzz not in this document qqq", ORDER):
         assert not r.found and r.evaluated and r.page is None and r.match is None
+
+
+def test_text_head_is_bounded_head_of_extracted_text():
+    pdf, answer = _case("control")
+    for r in compare_loaders(pdf, answer, ORDER):
+        assert len(r.text_head) <= TEXT_HEAD_MAX
+        assert r.text_head == r.text_head[: r.char_count]
+        assert r.text_head or r.char_count == 0
+        assert len(r.text_head) == min(r.char_count, TEXT_HEAD_MAX)
 
 
 def test_empty_answer_is_unevaluated():
