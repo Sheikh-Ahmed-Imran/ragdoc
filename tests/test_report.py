@@ -15,7 +15,7 @@ from ragdoc.attribution.verdict import (
     Verdict,
 )
 from ragdoc.config import RunConfig
-from ragdoc.report import format_metric, precision_at_k, render_report
+from ragdoc.report import format_metric, precision_at_k, reciprocal_rank, render_report
 
 
 def _missing_context_verdict() -> Verdict:
@@ -130,3 +130,28 @@ def test_diagnose_report_unchanged_by_compare_snippet_work():
     verdict, config = _missing_context_verdict(), RunConfig(top_k=5)
     for out in (render_report(verdict, config), render_report(verdict, config, verbose=True)):
         assert "found_snippet" not in out and "extracted:" not in out
+
+
+def test_retrieval_line_has_rr_without_ceiling():
+    out = render_report(_missing_context_verdict(), RunConfig(top_k=5))
+    line = next(ln for ln in out.splitlines() if ln.strip().startswith("retrieval"))
+    assert "precision@5 = 0.00 (max 0.20)" in line
+    assert line.endswith("; RR = 0.04")
+    assert "RR = 0.04 (max" not in line
+    assert reciprocal_rank(8) == 0.125
+
+
+def test_no_rr_when_retrieval_not_reached():
+    verdict = Verdict(
+        stage="extraction",
+        reason_code=MISSING_CONTEXT,
+        reason="lost",
+        fix=FIXES[MISSING_CONTEXT],
+        stages=(
+            StageReport("extraction", CheckStatus.FAIL, CheckResult.failed("lost", {})),
+            StageReport("chunking", CheckStatus.NOT_REACHED, None),
+            StageReport("retrieval", CheckStatus.NOT_REACHED, None),
+            StageReport("generation", CheckStatus.NOT_REACHED, None),
+        ),
+    )
+    assert "RR" not in render_report(verdict, RunConfig(top_k=5))

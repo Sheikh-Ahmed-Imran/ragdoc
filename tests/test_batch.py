@@ -177,7 +177,7 @@ def test_json_output_shape(monkeypatch, tmp_path, capfd, batch_result):
     assert cli.main(["batch", str(PDF), str(QUESTIONS), "--json", str(out_path)]) == 0
     capfd.readouterr()
     data = json.loads(out_path.read_text(encoding="utf-8"))
-    assert set(data) == {"distribution", "questions"}
+    assert set(data) == {"distribution", "retrieval_metrics", "questions"}
     assert data["distribution"] == SPEC["expected_counts"]
     assert len(data["questions"]) == batch_result.total
     for row, item in zip(data["questions"], batch_result.results):
