@@ -5,10 +5,11 @@ Terminal text only (spec Exclusions, ADR-004). The reporter renders what
 imports the engine's runner, so the engine stays scriptable without its output
 format being what callers parse (``.ai/architecture/components.md``).
 
-Every metric is printed with its theoretical maximum (``.ai/constitution.md``):
+Every precision metric is printed with its theoretical maximum (``.ai/constitution.md``):
 with one labelled chunk per question ``precision@k`` cannot exceed ``1/k``, so a
 precision figure only ever appears through :func:`format_metric`, which has no
-way to omit the ceiling.
+way to omit the ceiling. Reciprocal rank is not precision and maxes at 1.0, so
+it is printed plainly.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from ragdoc.artifacts import CheckStatus
 from ragdoc.attribution.verdict import StageReport, Verdict
 from ragdoc.config import RunConfig
 
-__all__ = ["format_metric", "precision_at_k", "render_report"]
+__all__ = ["format_metric", "precision_at_k", "reciprocal_rank", "render_report"]
 
 _NOT_REACHED = "— not reached"
 _PASS = "✓"
@@ -43,6 +44,15 @@ def precision_at_k(position: int, top_k: int) -> tuple[float, float]:
     return (ceiling if position <= top_k else 0.0), ceiling
 
 
+def reciprocal_rank(position: int) -> float:
+    """``1 / position`` for the single relevant chunk (1-based absolute rank).
+
+    Not a precision figure and it tops out at 1.0, so it is printed without a
+    ``(max …)`` ceiling.
+    """
+    return 1.0 / position
+
+
 def _stage_detail(report: StageReport, top_k: Optional[int]) -> str:
     result = report.result
     evidence = result.evidence if result is not None else {}
@@ -52,6 +62,7 @@ def _stage_detail(report: StageReport, top_k: Optional[int]) -> str:
         if k:
             value, ceiling = precision_at_k(evidence["position"], k)
             detail += f"; {format_metric(f'precision@{k}', value, ceiling)}"
+        detail += f"; RR = {reciprocal_rank(evidence['position']):.2f}"
         return detail
     if report.stage == "chunking" and evidence.get("context_missing"):
         return "section heading not embedded in chunk text"
