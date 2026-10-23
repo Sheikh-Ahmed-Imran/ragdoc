@@ -57,7 +57,7 @@ def test_diagnose_dispatches_verbose(monkeypatch):
         def rank(self, *a): return []
         def run(self, **k): return None
 
-    monkeypatch.setattr(cli, "PyMuPDFLoader", _Stub)
+    monkeypatch.setattr(cli, "get_loader", lambda name: _Stub())
     monkeypatch.setattr(cli, "Chunker", _Stub)
     monkeypatch.setattr(cli, "LocalEmbeddingsIndexer", _Stub)
     monkeypatch.setattr(cli, "Retriever", _Stub)
