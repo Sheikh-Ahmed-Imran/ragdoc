@@ -146,3 +146,48 @@ def test_diagnose_reproduces_v0_verdict():
     report = run(args)
     assert f"VERDICT: {entry['known_cause']}" in report
     assert "loader: pymupdf" in report
+
+
+def _window_result(text, start, end):
+    from ragdoc.compare import _matched_window
+
+    return _matched_window(text, start, end)
+
+
+def test_matched_window_context_and_ellipses():
+    text = "A" * 100 + "ANSWER" + "B" * 100
+    snip = _window_result(text, 100, 106)
+    assert snip == "…" + "A" * 40 + "ANSWER" + "B" * 40 + "…"
+    assert _window_result("xx ANSWER yy", 3, 9) == "xx ANSWER yy"
+
+
+def test_matched_window_long_span_takes_head_and_is_bounded():
+    text = "P" * 50 + "M" * 500 + "S" * 50
+    snip = _window_result(text, 50, 550)
+    assert len(snip) <= TEXT_HEAD_MAX and snip.startswith("…M") and snip.endswith("M…")
+    assert len(_window_result(text, 50, 50 + 200)) <= TEXT_HEAD_MAX
+
+
+def test_found_snippet_only_on_find_and_head_unchanged(no_network):
+    pdf, answer = _case("two_column")
+    for r in compare_loaders(pdf, answer, ORDER):
+        if r.found:
+            assert r.found_snippet and len(r.found_snippet) <= TEXT_HEAD_MAX
+        else:
+            assert r.found_snippet is None
+        assert len(r.text_head) == min(r.char_count, TEXT_HEAD_MAX)
+    for r in compare_loaders(pdf, "zzz not in this document qqq", ORDER):
+        assert r.found_snippet is None
+
+
+def test_verbose_find_on_two_column_shows_matched_text_not_head(no_network):
+    pdf, answer = _case("two_column")
+    results = compare_loaders(pdf, answer, ORDER)
+    by_name = {r.loader: r for r in results}
+    out = render_comparison(results, verbose=True)
+    for name in _entry("two_column")["preserved_by"]:
+        r = by_name[name]
+        assert answer.split()[0] in r.found_snippet
+        chunk = next(c for c in out.split("\n\n")[1:] if c.splitlines()[0] == name)
+        line = next(l for l in chunk.splitlines() if "extracted:" in l)
+        assert r.found_snippet.replace("\n", "\\n") in line
