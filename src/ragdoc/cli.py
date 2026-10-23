@@ -25,7 +25,7 @@ from ragdoc.chunker import Chunker
 from ragdoc.compare import compare_loaders
 from ragdoc.config import RunConfig
 from ragdoc.indexer.local_embeddings import LocalEmbeddingsIndexer
-from ragdoc.loader.pymupdf_loader import PyMuPDFLoader
+from ragdoc.loader import get as get_loader
 from ragdoc.loader import names as loader_names
 from ragdoc.report import render_report
 from ragdoc.report.batch import batch_to_json, render_batch_report
@@ -49,6 +49,15 @@ def _loader_list(value: str) -> list[str]:
             f"registered loaders: {', '.join(known)}"
         )
     return requested
+
+
+def _loader_name(value: str) -> str:
+    known = loader_names()
+    if value not in known:
+        raise argparse.ArgumentTypeError(
+            f"unknown loader {value!r}; registered loaders: {', '.join(known)}"
+        )
+    return value
 
 
 def _add_answer(parser: argparse.ArgumentParser) -> None:
@@ -94,6 +103,10 @@ def _add_config_flags(parser: argparse.ArgumentParser) -> None:
                         help="embedding model (default: %(default)s)")
     parser.add_argument("--top-k", type=int, default=_DEFAULTS.top_k,
                         help="retrieval cutoff (default: %(default)s)")
+    parser.add_argument("--loader", type=_loader_name, default=_DEFAULTS.loader,
+                        metavar="NAME",
+                        help="PDF loader to extract with; one of the registered "
+                             "loaders (default: %(default)s)")
 
 
 def _add_verbose(parser: argparse.ArgumentParser) -> None:
@@ -108,6 +121,7 @@ def _config_from(args: argparse.Namespace) -> RunConfig:
         prepend_section_context=args.prepend_section_context,
         embedding_model=args.embedding_model,
         top_k=args.top_k,
+        loader=args.loader,
     )
 
 
@@ -150,7 +164,7 @@ def build_parser() -> argparse.ArgumentParser:
 def run(args: argparse.Namespace) -> str:
     expected_answer = _resolve_answer(args)
     config = _config_from(args)
-    doc = PyMuPDFLoader().load(args.pdf)
+    doc = get_loader(config.loader).load(args.pdf)
     chunks = Chunker(config).chunk(doc)
     indexer = LocalEmbeddingsIndexer(config)
     indexer.index(chunks)

@@ -110,7 +110,7 @@ def _stub_diagnose(monkeypatch, seen):
         def run(self, **k):
             seen["answer"] = k["expected_answer"]
 
-    monkeypatch.setattr(cli, "PyMuPDFLoader", _Stub)
+    monkeypatch.setattr(cli, "get_loader", lambda name: _Stub())
     monkeypatch.setattr(cli, "Chunker", _Stub)
     monkeypatch.setattr(cli, "LocalEmbeddingsIndexer", _Stub)
     monkeypatch.setattr(cli, "Retriever", _Stub)
