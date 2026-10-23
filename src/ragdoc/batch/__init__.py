@@ -18,7 +18,7 @@ Rules this module keeps:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence, Union
 
@@ -33,10 +33,13 @@ __all__ = [
     "BUCKETS",
     "BatchInputError",
     "BatchResult",
+    "PreparedBatch",
     "QuestionPair",
     "QuestionResult",
     "load_question_set",
+    "prepare_batch",
     "run_batch",
+    "score_batch",
 ]
 
 #: Every bucket a verdict can land in, in report order. There is deliberately no
@@ -146,28 +149,58 @@ def _evidence(verdict: Verdict) -> dict[str, Any]:
     return merged
 
 
-def run_batch(
+@dataclass(frozen=True)
+class PreparedBatch:
+    """The ``top_k``-independent forward state for one PDF and one question list.
+
+    ``rankings[i]`` is the full ranking (every chunk) for ``pairs[i]``. ``config``
+    is the config the forward pass was built from; :func:`score_batch` overrides
+    only its ``top_k``.
+    """
+
+    doc: Any
+    chunks: Any
+    rankings: tuple[Any, ...]
+    config: RunConfig
+
+
+def prepare_batch(
     pdf: Union[str, Path],
     config: RunConfig,
     pairs: Sequence[QuestionPair],
-) -> BatchResult:
-    """Attribute every pair against one PDF, building the forward pass once."""
+) -> PreparedBatch:
+    """Build the forward pass once: load, chunk, embed and rank every pair."""
     doc = get_loader(config.loader).load(pdf)
     chunks = Chunker(config).chunk(doc)
     indexer = LocalEmbeddingsIndexer(config)
     indexer.index(chunks)
     retriever = Retriever(indexer, config)
+    rankings = tuple(retriever.rank(pair.question) for pair in pairs)
+    return PreparedBatch(doc=doc, chunks=chunks, rankings=rankings, config=config)
+
+
+def score_batch(
+    prepared: PreparedBatch,
+    pairs: Sequence[QuestionPair],
+    top_k: int,
+) -> BatchResult:
+    """Score prepared forward state at ``top_k``; no loading, embedding or ranking."""
+    if len(pairs) != len(prepared.rankings):
+        raise ValueError(
+            f"prepared batch holds {len(prepared.rankings)} rankings "
+            f"but {len(pairs)} pairs were given"
+        )
+    config = replace(prepared.config, top_k=top_k)
     engine = build_engine()
 
     counts = {name: 0 for name in BUCKETS}
     results: list[QuestionResult] = []
-    for pair in pairs:
-        ranking = retriever.rank(pair.question)
+    for pair, ranking in zip(pairs, prepared.rankings):
         verdict = compose_verdict(
             engine.run(
                 expected_answer=pair.expected_answer,
-                doc=doc,
-                chunks=chunks,
+                doc=prepared.doc,
+                chunks=prepared.chunks,
                 ranking=ranking,
                 config=config,
             )
@@ -186,3 +219,12 @@ def run_batch(
             )
         )
     return BatchResult(results=tuple(results), counts=counts)
+
+
+def run_batch(
+    pdf: Union[str, Path],
+    config: RunConfig,
+    pairs: Sequence[QuestionPair],
+) -> BatchResult:
+    """Attribute every pair against one PDF, building the forward pass once."""
+    return score_batch(prepare_batch(pdf, config, pairs), pairs, config.top_k)

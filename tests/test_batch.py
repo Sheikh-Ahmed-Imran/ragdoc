@@ -156,6 +156,47 @@ def test_forward_pass_built_once(monkeypatch):
     assert (len(built), len(indexed), len(loaded)) == (1, 1, 1)
 
 
+def test_one_forward_pass_scores_many_top_k(monkeypatch):
+    pytest.importorskip("sentence_transformers")
+    from dataclasses import replace
+
+    built, indexed, loaded, ranked = [], [], [], []
+    init, index = LocalEmbeddingsIndexer.__init__, LocalEmbeddingsIndexer.index
+    load, rank = PyMuPDFLoader.load, Retriever.rank
+
+    def counting_init(self, *a, **k):
+        built.append(1)
+        init(self, *a, **k)
+
+    def counting_index(self, *a, **k):
+        indexed.append(1)
+        return index(self, *a, **k)
+
+    def counting_load(self, *a, **k):
+        loaded.append(1)
+        return load(self, *a, **k)
+
+    def counting_rank(self, *a, **k):
+        ranked.append(1)
+        return rank(self, *a, **k)
+
+    monkeypatch.setattr(batch.LocalEmbeddingsIndexer, "__init__", counting_init)
+    monkeypatch.setattr(batch.LocalEmbeddingsIndexer, "index", counting_index)
+    monkeypatch.setattr(PyMuPDFLoader, "load", counting_load)
+    monkeypatch.setattr(Retriever, "rank", counting_rank)
+
+    pairs = _pairs()
+    top_ks = [1, 3, 5, 10]
+    prepared = batch.prepare_batch(PDF, CFG, pairs)
+    scored = {k: batch.score_batch(prepared, pairs, k) for k in top_ks}
+    assert (len(built), len(indexed), len(loaded)) == (1, 1, 1)
+    assert len(ranked) == len(pairs)
+
+    for k in top_ks:
+        direct = run_batch(PDF, replace(CFG, top_k=k), pairs)
+        assert scored[k] == direct
+
+
 @pytest.mark.parametrize("position", range(len(EXPECTED_BUCKETS)))
 def test_batch_bucket_equals_single_question_verdict(batch_result, position):
     verdict = _single(_pairs()[position])
