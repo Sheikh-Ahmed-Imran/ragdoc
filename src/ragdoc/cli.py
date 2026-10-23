@@ -30,6 +30,7 @@ from ragdoc.loader import names as loader_names
 from ragdoc.report import render_report
 from ragdoc.report.batch import batch_to_json, render_batch_report
 from ragdoc.report.compare import render_comparison
+from ragdoc.report.retrieved import render_retrieved
 from ragdoc.retriever import Retriever
 
 __all__ = ["build_parser", "main", "run", "run_batch", "run_compare"]
@@ -140,6 +141,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add_answer(diagnose)
     _add_config_flags(diagnose)
     _add_verbose(diagnose)
+    diagnose.add_argument("--show-retrieved", action="store_true",
+                          help="also list the top-k chunks the retriever returned, "
+                               "marking the chunk that holds your answer")
 
     compare = sub.add_parser(
         "compare", help="compare how each PDF loader extracts the expected answer",
@@ -176,7 +180,23 @@ def run(args: argparse.Namespace) -> str:
         ranking=ranking,
         config=config,
     )
-    return render_report(compose_verdict(result), config, verbose=args.verbose)
+    verdict = compose_verdict(result)
+    report = render_report(verdict, config, verbose=args.verbose)
+    if args.show_retrieved:
+        target_id = _target_chunk_id(verdict)
+        report += "\n\n" + render_retrieved(ranking, chunks, target_id, config.top_k)
+    return report
+
+
+def _target_chunk_id(verdict) -> Optional[str]:
+    # Read the raw check result, not the displayed status: the missing-context
+    # case displays chunking as FAIL while survive still passed with a target.
+    for stage in verdict.stages:
+        if stage.stage == "chunking":
+            result = stage.result
+            if result is not None and result.is_pass:
+                return result.evidence.get("target_chunk_id")
+    return None
 
 
 def run_compare(args: argparse.Namespace) -> str:
