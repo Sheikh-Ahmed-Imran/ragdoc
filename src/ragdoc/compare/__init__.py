@@ -30,6 +30,10 @@ __all__ = ["LoaderResult", "TEXT_HEAD_MAX", "compare_loaders"]
 #: Maximum length of ``LoaderResult.text_head``.
 TEXT_HEAD_MAX = 240
 
+#: Characters of surrounding context kept on each side of a matched span.
+_CONTEXT = 40
+_ELLIPSIS = "…"
+
 
 @dataclass(frozen=True)
 class LoaderResult:
@@ -47,6 +51,10 @@ class LoaderResult:
         page_count: number of pages in this loader's page map.
         text_head: the first ``TEXT_HEAD_MAX`` characters of the extracted text
             — a bounded sample, never the whole document.
+        found_snippet: on a find, the matched span of the extraction with about
+            40 characters of context each side, at most ``TEXT_HEAD_MAX``
+            characters (ellipses included), ``…``-marked where clipped; ``None``
+            on a miss, an unevaluated result or an empty extraction.
     """
 
     loader: str
@@ -57,6 +65,28 @@ class LoaderResult:
     char_count: int
     page_count: int
     text_head: str = ""
+    found_snippet: Optional[str] = None
+
+
+def _matched_window(text: str, start: int, end: int) -> str:
+    """Slice ``text`` around ``[start, end)``, bounded to ``TEXT_HEAD_MAX``."""
+    n = len(text)
+    context = _CONTEXT
+    while True:
+        lo, hi = max(0, start - context), min(n, end + context)
+        marks = (lo > 0) + (hi < n)
+        if hi - lo + marks <= TEXT_HEAD_MAX:
+            break
+        if context == 0:
+            # The match alone fills the bound: take the head of the matched region.
+            lo = start
+            hi = min(n, start + TEXT_HEAD_MAX - (start > 0) - 1)
+            if hi >= n:
+                hi = n
+            break
+        context -= 1
+    body = text[lo:hi]
+    return (_ELLIPSIS if lo > 0 else "") + body + (_ELLIPSIS if hi < n else "")
 
 
 def compare_loaders(
@@ -85,6 +115,7 @@ def compare_loaders(
         doc = loader.load(pdf_path)
         check = locate(expected_answer, doc)
         found = check.is_pass
+        span = check.evidence.get("span") if found else None
         results.append(
             LoaderResult(
                 loader=name,
@@ -95,6 +126,9 @@ def compare_loaders(
                 char_count=len(doc.text),
                 page_count=len(doc.page_map),
                 text_head=doc.text[:TEXT_HEAD_MAX],
+                found_snippet=(
+                    _matched_window(doc.text, span.start, span.end) if span is not None else None
+                ),
             )
         )
     return results

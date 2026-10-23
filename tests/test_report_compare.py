@@ -62,3 +62,55 @@ def test_verbose_snippet_is_bounded_with_truncation_indicator():
     assert "… (300 of 5000 chars)" in out
     # a complete extraction carries no truncation indicator
     assert "of 12 chars" not in out
+
+
+# --- matched-region snippet on a find (T-006) ---------------------------------
+
+_HEAD = "DOCUMENT HEAD unrelated preamble " * 7
+
+
+def _find(snippet="…context before THE ANSWER context after…", **kw):
+    return LoaderResult("pymupdf", True, True, 4, "exact", 5000, 6, text_head=_HEAD, found_snippet=snippet, **kw)
+
+
+def _extracted(out: str, loader: str) -> str:
+    block = out.split("\n\n")[1:]
+    chunk = next(c for c in block if c.splitlines()[0] == loader)
+    return next(l for l in chunk.splitlines() if l.strip().startswith("extracted:"))
+
+
+def test_verbose_find_shows_matched_region_and_page_not_head():
+    r = _find()
+    out = render_comparison([r], verbose=True)
+    line = _extracted(out, "pymupdf")
+    assert "THE ANSWER" in line and "context before" in line and "context after" in line
+    assert "DOCUMENT HEAD" not in line and line.split(":", 1)[1].strip() != r.text_head
+    assert "page:          4" in out
+
+
+def test_verbose_miss_shows_head_as_before():
+    r = LoaderResult("pdfplumber", False, True, None, None, 5000, 2, text_head="head text")
+    line = _extracted(render_comparison([r], verbose=True), "pdfplumber")
+    assert line == '  extracted:     "head text" … (9 of 5000 chars)'
+    assert "page:" not in render_comparison([r], verbose=True).split("\n\n", 1)[1]
+
+
+def test_verbose_empty_extraction_says_no_text():
+    r = LoaderResult("pypdf", False, True, None, None, 0, 0)
+    assert _extracted(render_comparison([r], verbose=True), "pypdf").endswith("(no text extracted)")
+
+
+def test_verbose_found_snippet_bounded_with_indicator_and_escaped():
+    from ragdoc.compare import TEXT_HEAD_MAX
+
+    snip = "…" + "a\nb " * 50
+    snip = snip[: TEXT_HEAD_MAX - 1] + "…"
+    line = _extracted(render_comparison([_find(snip)], verbose=True), "pymupdf")
+    assert len(snip) <= TEXT_HEAD_MAX
+    assert "…" in line and line.count("\n") == 0 and "\\n" in line
+
+
+def test_verbose_false_equals_default_with_found_and_missed():
+    results = [_find(), LoaderResult("pdfplumber", False, True, None, None, 5000, 2, text_head=_HEAD)]
+    assert render_comparison(results, verbose=False) == render_comparison(results)
+    assert "THE ANSWER" not in render_comparison(results)

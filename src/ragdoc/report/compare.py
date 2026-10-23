@@ -52,12 +52,19 @@ def _attempt(result: "LoaderResult") -> str:
     return "not found" if result.evaluated else "not evaluated (empty answer)"
 
 
+def _escape(text: str) -> str:
+    # Escape control characters so the snippet stays on one line.
+    return text.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
+
+
 def _snippet(result: "LoaderResult") -> str:
+    if result.found and result.found_snippet:
+        # The snippet carries its own ellipses where it was clipped.
+        return f'"{_escape(result.found_snippet)}"'
     head = result.text_head
     if not head:
         return "(no text extracted)"
-    # Escape control characters so the snippet stays on one line.
-    shown = head.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
+    shown = _escape(head)
     text = f'"{shown}"'
     if len(head) < result.char_count:
         text += f" … ({len(head)} of {result.char_count} chars)"
@@ -67,7 +74,10 @@ def _snippet(result: "LoaderResult") -> str:
 def _verbose_block(results: Sequence["LoaderResult"]) -> list[str]:
     lines: list[str] = []
     for r in results:
-        lines += ["", r.loader, f"  match attempt: {_attempt(r)}", f"  extracted:     {_snippet(r)}"]
+        lines += ["", r.loader, f"  match attempt: {_attempt(r)}"]
+        if r.found and r.found_snippet and r.page is not None:
+            lines.append(f"  page:          {r.page}")
+        lines.append(f"  extracted:     {_snippet(r)}")
     return lines
 
 

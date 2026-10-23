@@ -124,3 +124,9 @@ def test_verbose_shows_extraction_span_and_page():
     verdict = Verdict(stage=None, reason_code=None, reason="", fix="", stages=stages)
     out = render_report(verdict, RunConfig(), verbose=True)
     assert "page: 3" in out and "the answer" in out and "match kind: exact" in out
+
+
+def test_diagnose_report_unchanged_by_compare_snippet_work():
+    verdict, config = _missing_context_verdict(), RunConfig(top_k=5)
+    for out in (render_report(verdict, config), render_report(verdict, config, verbose=True)):
+        assert "found_snippet" not in out and "extracted:" not in out
