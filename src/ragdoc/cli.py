@@ -1,4 +1,4 @@
-"""Command-line entry point: ``diagnose``, ``compare`` and ``batch`` against one PDF.
+"""Command-line entry point: ``diagnose``, ``compare``, ``batch`` and ``sweep`` against one PDF.
 
 A thin wiring layer. It builds a :class:`RunConfig`, runs the stages in order
 (loader -> chunker -> indexer -> retriever -> engine -> reporter) and prints the
@@ -6,7 +6,7 @@ report. Attribution, scoring and formatting all live in the components it calls;
 nothing in the engine imports this module (``.ai/constitution.md``).
 
 ``diagnose`` takes one question; ``compare`` takes none; ``batch`` takes one question
-set. ``diagnose`` and ``compare`` take the expected answer as an argument or from
+set; ``sweep`` takes a question set and a list of values per knob. ``diagnose`` and ``compare`` take the expected answer as an argument or from
 ``--answer-file``.
 One PDF and one configuration per invocation.
 """
@@ -31,9 +31,12 @@ from ragdoc.report import render_report
 from ragdoc.report.batch import batch_to_json, render_batch_report
 from ragdoc.report.compare import render_comparison
 from ragdoc.report.retrieved import render_retrieved
+from ragdoc.report.sweep import OBJECTIVES, render_sweep_table, sweep_to_json
 from ragdoc.retriever import Retriever
+from ragdoc.sweep import build_grid, count_forward_passes
+from ragdoc.sweep import run_sweep as execute_sweep
 
-__all__ = ["build_parser", "main", "run", "run_batch", "run_compare"]
+__all__ = ["build_parser", "main", "run", "run_batch", "run_compare", "run_sweep"]
 
 _DEFAULTS = RunConfig()
 
@@ -59,6 +62,39 @@ def _loader_name(value: str) -> str:
             f"unknown loader {value!r}; registered loaders: {', '.join(known)}"
         )
     return value
+
+
+def _csv(value: str, convert, what: str) -> list:
+    parts = [part.strip() for part in value.split(",") if part.strip()]
+    if not parts:
+        raise argparse.ArgumentTypeError(f"expected a comma-separated list of {what}")
+    try:
+        return [convert(part) for part in parts]
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"expected a comma-separated list of {what}, got {value!r}"
+        ) from None
+
+
+def _int_list(value: str) -> list[int]:
+    return _csv(value, int, "integers")
+
+
+def _str_list(value: str) -> list[str]:
+    return _csv(value, str, "names")
+
+
+def _parse_bool(text: str) -> bool:
+    lowered = text.lower()
+    if lowered in ("true", "1", "yes"):
+        return True
+    if lowered in ("false", "0", "no"):
+        return False
+    raise ValueError(text)
+
+
+def _bool_list(value: str) -> list[bool]:
+    return _csv(value, _parse_bool, "true/false values")
 
 
 def _add_answer(parser: argparse.ArgumentParser) -> None:
@@ -131,7 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="ragdoc",
         description="Diagnose which pipeline stage lost the answer to one question.",
     )
-    sub = parser.add_subparsers(dest="command", metavar="{diagnose,compare,batch}")
+    sub = parser.add_subparsers(dest="command", metavar="{diagnose,compare,batch,sweep}")
 
     diagnose = sub.add_parser(
         "diagnose", help="diagnose which pipeline stage lost the answer",
@@ -162,6 +198,30 @@ def build_parser() -> argparse.ArgumentParser:
     _add_config_flags(batch)
     batch.add_argument("--json", dest="json_path", default=None, metavar="PATH",
                        help="also write the structured result to this JSON file")
+
+    sweep = sub.add_parser(
+        "sweep", help="run a question set across a grid of configs and name the best one",
+    )
+    sweep.add_argument("pdf", help="path to the PDF")
+    sweep.add_argument("questions", help="path to the JSON question set")
+    sweep.add_argument("--chunk-size", type=_int_list, default=None, metavar="a,b",
+                       help=f"comma-separated chunk sizes (default: {_DEFAULTS.chunk_size})")
+    sweep.add_argument("--overlap", type=_int_list, default=None, metavar="a,b",
+                       help=f"comma-separated overlaps (default: {_DEFAULTS.overlap})")
+    sweep.add_argument("--top-k", type=_int_list, default=None, metavar="a,b",
+                       help=f"comma-separated retrieval cutoffs (default: {_DEFAULTS.top_k})")
+    sweep.add_argument("--embedding-model", type=_str_list, default=None, metavar="a,b",
+                       help="comma-separated embedding models "
+                            f"(default: {_DEFAULTS.embedding_model})")
+    sweep.add_argument("--prepend-section-context", type=_bool_list, default=None,
+                       metavar="true,false",
+                       help="comma-separated true/false values "
+                            f"(default: {str(_DEFAULTS.prepend_section_context).lower()})")
+    sweep.add_argument("--objective", choices=OBJECTIVES, default="no-failure",
+                       help="what the winner maximises; MRR breaks ties "
+                            "(default: %(default)s)")
+    sweep.add_argument("--json", dest="json_path", default=None, metavar="PATH",
+                       help="also write the full per-config results to this JSON file")
     return parser
 
 
@@ -217,7 +277,43 @@ def run_batch(args: argparse.Namespace) -> str:
     return render_batch_report(result)
 
 
-_COMMANDS = {"diagnose": run, "compare": run_compare, "batch": run_batch}
+def _emit(text: str) -> None:
+    # Non-ASCII safe, like main's report write.
+    sys.stdout.buffer.write((text + "\n").encode("utf-8"))
+    sys.stdout.buffer.flush()
+
+
+def run_sweep(args: argparse.Namespace) -> str:
+    knobs = dict(
+        chunk_sizes=args.chunk_size,
+        overlaps=args.overlap,
+        top_ks=args.top_k,
+        embedding_models=args.embedding_model,
+        prepend_section_context=args.prepend_section_context,
+    )
+    pairs = load_question_set(args.questions)
+    grid = build_grid(**knobs)
+    passes = count_forward_passes(grid)
+    _emit(f"Sweep: {len(grid)} config{'s' if len(grid) != 1 else ''}, "
+          f"{passes} forward pass{'es' if passes != 1 else ''}")
+
+    def progress(done: int, total: int, config: RunConfig) -> None:
+        print(f"[{done}/{total}] chunk_size={config.chunk_size} overlap={config.overlap} "
+              f"top_k={config.top_k} model={config.embedding_model} "
+              f"prepend={str(config.prepend_section_context).lower()}",
+              file=sys.stderr, flush=True)
+
+    result = execute_sweep(args.pdf, pairs, progress=progress, **knobs)
+    if args.json_path:
+        payload = json.dumps(sweep_to_json(result, args.objective), indent=2,
+                             ensure_ascii=False)
+        with open(args.json_path, "w", encoding="utf-8") as handle:
+            handle.write(payload + "\n")
+    return render_sweep_table(result, args.objective)
+
+
+_COMMANDS = {"diagnose": run, "compare": run_compare, "batch": run_batch,
+             "sweep": run_sweep}
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
