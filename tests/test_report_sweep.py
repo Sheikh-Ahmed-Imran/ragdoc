@@ -55,6 +55,39 @@ def test_full_tie_keeps_grid_order_single_winner():
     assert rank_entries(result)[0] == 0
 
 
+def _top_k_sweep(*top_ks, size=500):
+    entries = tuple(
+        SweepEntry(RunConfig(chunk_size=size, top_k=k), _batch(2, [1], top_k=k))
+        for k in top_ks
+    )
+    return SweepResult(entries=entries, config_count=len(entries), forward_passes=len(entries))
+
+
+@pytest.mark.parametrize("order", [(5, 10), (10, 5)])
+def test_tie_prefers_smaller_top_k_regardless_of_input_order(order):
+    result = _top_k_sweep(*order)
+    winner = rank_entries(result)[0]
+    assert result.entries[winner].config.top_k == 5
+
+
+def test_top_k_tie_break_ranks_after_mrr():
+    # top_k 10 has the better MRR, so it still wins over the smaller top_k 5.
+    result = _sweep((500, 2, [2]), (800, 2, [1]))
+    entries = (
+        SweepEntry(RunConfig(top_k=5), result.entries[0].batch),
+        SweepEntry(RunConfig(top_k=10), result.entries[1].batch),
+    )
+    assert rank_entries(SweepResult(entries, 2, 2))[0] == 1
+
+
+def test_other_knobs_keep_grid_order_after_top_k():
+    # Same top_k, different chunk_size: no preference, grid order wins.
+    batch = _batch(2, [1])
+    for sizes in [(500, 800), (800, 500)]:
+        entries = tuple(SweepEntry(RunConfig(chunk_size=s), batch) for s in sizes)
+        assert rank_entries(SweepResult(entries, 2, 2))[0] == 0
+
+
 def test_unknown_objective_rejected():
     with pytest.raises(ValueError):
         rank_entries(RESULT, "bogus")
