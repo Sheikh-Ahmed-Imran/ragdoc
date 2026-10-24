@@ -9,7 +9,8 @@ Rules this module keeps:
   so comparable across configs. Hit-rate and MRR are over the per-config subset
   that reached retrieval (ADR-009); they are offered as objectives, and the other
   of the pair is the graded tie-break (MRR after no-failure).
-* **Exactly one winner.** Remaining ties fall back to grid order (stable sort).
+* **Exactly one winner.** Objective, then MRR, then smaller ``top_k``; remaining
+  ties fall back to grid order (stable sort). No other knob is preferred.
 * **No new metrics.** Bucket counts and :func:`retrieval_metrics` only.
 * **Pure view.** No CLI import; the result type is imported for typing only.
 """
@@ -49,15 +50,17 @@ def _score(value: Optional[float]) -> float:
 def _key(entry: "SweepEntry", objective: str) -> tuple:
     metrics = retrieval_metrics(entry.batch)
     mrr, hit = _score(metrics["mrr"]), _score(metrics["hit_rate"])
+    # Last key: smaller top_k wins a tie (negated, as the sort is descending).
+    smaller_top_k = -entry.config.top_k
     if objective == "no-failure":
-        return (entry.batch.counts.get("no-failure", 0), mrr)
+        return (entry.batch.counts.get("no-failure", 0), mrr, smaller_top_k)
     if objective == "hit-rate":
-        return (hit, mrr)
-    return (mrr, hit)
+        return (hit, mrr, smaller_top_k)
+    return (mrr, hit, smaller_top_k)
 
 
 def rank_entries(result: "SweepResult", objective: str = "no-failure") -> list[int]:
-    """Entry indices, best first. Ties keep grid order, so there is one winner."""
+    """Entry indices, best first: objective, MRR, smaller top_k, then grid order."""
     if objective not in OBJECTIVES:
         raise ValueError(
             f"unknown objective {objective!r}; choose one of: {', '.join(OBJECTIVES)}"
