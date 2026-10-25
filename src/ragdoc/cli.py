@@ -115,7 +115,9 @@ def _resolve_answer(args: argparse.Namespace) -> str:
                          "--answer-file, not both")
     if path is not None:
         try:
-            with open(path, encoding="utf-8") as handle:
+            # utf-8-sig drops a leading BOM (added by some Windows editors) so it
+            # cannot become part of the expected answer.
+            with open(path, encoding="utf-8-sig") as handle:
                 resolved = handle.read().rstrip()
         except FileNotFoundError:
             raise FileNotFoundError(f"answer file not found: {path}") from None

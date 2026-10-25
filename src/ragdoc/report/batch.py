@@ -113,8 +113,8 @@ def _evidence_detail(item: "QuestionResult") -> str:
         parts.append(
             f"rank {evidence['position']}" + (f" of {total}" if total else "")
         )
-    if "page" in evidence:
-        parts.append(f"page {evidence['page']}")
+    if "answer_page" in evidence:
+        parts.append(f"page {evidence['answer_page']}")
     k = evidence.get("top_k")
     if isinstance(evidence.get("position"), int) and isinstance(k, int) and k > 0:
         value, ceiling = precision_at_k(evidence["position"], k)
@@ -132,6 +132,8 @@ def render_batch_report(batch: "BatchResult", symbols: Symbols = UNICODE) -> str
 
     lines += [""] + _metrics_lines(retrieval_metrics(batch))
     lines += ["", "Questions:"]
+    if not total:
+        lines.append("  (no questions in the set)")
     for index, item in enumerate(batch.results, start=1):
         stage = item.stage if item.stage else symbols.not_reached
         row = f"  {index}. [{item.bucket}] {item.question}"

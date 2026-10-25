@@ -42,7 +42,15 @@ from ragdoc.artifacts import Chunk
 if TYPE_CHECKING:  # pragma: no cover - typing only, no runtime import
     import numpy as np
 
-__all__ = ["Indexer"]
+__all__ = ["Indexer", "ModelLoadError"]
+
+
+class ModelLoadError(ValueError):
+    """The embedding model could not be loaded or downloaded.
+
+    A ``ValueError`` so the CLI's existing handler reports it as a single clean
+    ``ragdoc: error: …`` line (exit 2) instead of a library traceback.
+    """
 
 
 class Indexer(ABC):

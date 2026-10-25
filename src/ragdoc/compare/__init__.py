@@ -99,15 +99,17 @@ def compare_loaders(
     Args:
         pdf_path: the PDF to extract.
         expected_answer: the user's asserted answer.
-        loader_names: loaders to run, in the order results are returned;
-            defaults to every registered loader (sorted by name).
+        loader_names: loaders to run, in the order results are returned; a
+            repeated name runs once, at its first occurrence. Defaults to
+            every registered loader (sorted by name).
 
     Raises:
         UnknownLoaderError: a name is not registered (raised before any loader
             runs, so a typo does not cost a partial run).
         FileNotFoundError: ``pdf_path`` does not exist (from the loader).
     """
-    chosen = list(names() if loader_names is None else loader_names)
+    # dict.fromkeys drops repeats but keeps first-occurrence order.
+    chosen = list(dict.fromkeys(names() if loader_names is None else loader_names))
     loaders = [(name, get(name)) for name in chosen]
 
     results: list[LoaderResult] = []

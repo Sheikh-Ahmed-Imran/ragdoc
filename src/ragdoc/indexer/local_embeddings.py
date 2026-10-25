@@ -26,7 +26,7 @@ import numpy as np
 
 from ragdoc.artifacts import Chunk
 from ragdoc.config import RunConfig
-from ragdoc.indexer import Indexer
+from ragdoc.indexer import Indexer, ModelLoadError
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, no runtime import
     from sentence_transformers import SentenceTransformer
@@ -88,7 +88,14 @@ class LocalEmbeddingsIndexer(Indexer):
         if self._model is None:
             from sentence_transformers import SentenceTransformer
 
-            self._model = SentenceTransformer(self.name)
+            try:
+                self._model = SentenceTransformer(self.name)
+            except Exception as exc:  # library error classes vary; translate at this one boundary
+                raise ModelLoadError(
+                    f"embedding model {self.name!r} is not cached and could not be "
+                    f"downloaded (no network access, or it may not be a valid model "
+                    f"name): {type(exc).__name__}: {' '.join(str(exc).split())}"
+                ) from exc
         return self._model
 
     def index(self, chunks: Sequence[Chunk]) -> None:

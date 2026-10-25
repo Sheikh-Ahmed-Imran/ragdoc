@@ -1,5 +1,6 @@
 """Unreadable / non-PDF files fail cleanly with ``LoaderError`` (T-011)."""
 
+import json
 import struct
 import zlib
 
@@ -68,7 +69,7 @@ def test_missing_file_still_file_not_found(loader_cls, tmp_path):
 ])
 def test_cli_reports_clean_error(argv, bad_pdf, tmp_path, capfd):
     q = tmp_path / "q.json"
-    q.write_text("[]", encoding="utf-8")
+    q.write_text(json.dumps([{"question": "q?", "expected_answer": "a"}]), encoding="utf-8")
     argv = [a.format(pdf=bad_pdf, q=q) for a in argv]
     assert cli.main(argv) == 2
     err = capfd.readouterr().err

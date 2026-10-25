@@ -63,7 +63,8 @@ def load_question_set(path: Union[str, Path]) -> list[QuestionPair]:
     """Read and validate a JSON question set, preserving input order."""
     path = Path(path)
     try:
-        text = path.read_text(encoding="utf-8")
+        # utf-8-sig strips a leading BOM and reads BOM-less files identically.
+        text = path.read_text(encoding="utf-8-sig")
     except OSError as exc:
         raise BatchInputError(f"cannot read question set {path}: {exc}") from exc
     try:
@@ -103,8 +104,8 @@ class QuestionResult:
 
     ``bucket`` is one of :data:`BUCKETS`. ``stage`` is the verdict's stage
     (``None`` for ``withheld`` / ``no-failure``). ``evidence`` merges the evidence
-    of every evaluated stage (``page``, ``snippet``, ``position``, ``total``,
-    ``top_k``, ...) so the reporter needs nothing else; ``verdict`` is the full
+    of every evaluated stage (``answer_page`` from extraction, ``chunk_page`` from
+    chunking, ``snippet``, ``position``, ``total``, ``top_k``, ...) so the reporter needs nothing else; ``verdict`` is the full
     :class:`Verdict` for anything further (``fix``, ``reason_code``, ``stages``).
     """
 
@@ -142,10 +143,19 @@ def _bucket(verdict: Verdict) -> str:
 
 
 def _evidence(verdict: Verdict) -> dict[str, Any]:
+    # Extraction and chunking both record ``page`` (the answer's page vs. the target
+    # chunk's start page); keep them under distinct keys so the later stage cannot
+    # overwrite the earlier one.
+    page_keys = {"extraction": "answer_page", "chunking": "chunk_page"}
     merged: dict[str, Any] = {}
     for report in verdict.stages:
-        if report.result is not None:
-            merged.update(report.result.evidence)
+        if report.result is None:
+            continue
+        evidence = dict(report.result.evidence)
+        key = page_keys.get(report.stage)
+        if key is not None and "page" in evidence:
+            evidence[key] = evidence.pop("page")
+        merged.update(evidence)
     return merged
 
 
@@ -169,7 +179,12 @@ def prepare_batch(
     config: RunConfig,
     pairs: Sequence[QuestionPair],
 ) -> PreparedBatch:
-    """Build the forward pass once: load, chunk, embed and rank every pair."""
+    """Build the forward pass once: load, chunk, embed and rank every pair.
+
+    An empty question set builds nothing (no loader, chunker, indexer or ranking).
+    """
+    if not pairs:
+        return PreparedBatch(doc=None, chunks=(), rankings=(), config=config)
     doc = get_loader(config.loader).load(pdf)
     chunks = Chunker(config).chunk(doc)
     indexer = LocalEmbeddingsIndexer(config)

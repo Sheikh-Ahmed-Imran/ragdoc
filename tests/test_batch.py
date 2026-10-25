@@ -110,6 +110,62 @@ def test_blank_answer_is_not_a_parseable_entry(tmp_path, no_network):
         load_question_set(path)
 
 
+def test_bom_prefixed_question_file_loads_like_plain(tmp_path, no_network):
+    body = json.dumps([{"question": "q?", "expected_answer": "a"}])
+    plain, bom = tmp_path / "plain.json", tmp_path / "bom.json"
+    plain.write_bytes(body.encode("utf-8"))
+    bom.write_bytes(b"\xef\xbb\xbf" + body.encode("utf-8"))
+    assert load_question_set(bom) == load_question_set(plain) == [QuestionPair("q?", "a")]
+
+
+@pytest.mark.parametrize("content", [b"\xef\xbb\xbf{not json", b"\xef\xbb\xbf{}"])
+def test_bom_malformed_or_non_array_still_fails_clearly(tmp_path, content, no_network):
+    path = tmp_path / "bad.json"
+    path.write_bytes(content)
+    with pytest.raises(batch.BatchInputError):
+        load_question_set(path)
+
+
+def test_answer_page_not_clobbered_by_chunk_page(no_network):
+    """Answer on page 3 in a chunk that starts on page 2: both pages survive."""
+    from types import SimpleNamespace
+
+    from ragdoc.attribution.checks import CheckResult
+    from ragdoc.report.batch import batch_to_json, render_batch_report
+
+    stages = [
+        SimpleNamespace(stage="extraction", result=CheckResult.passed(evidence={"page": 3})),
+        SimpleNamespace(stage="chunking", result=CheckResult.passed(evidence={"page": 2})),
+    ]
+    evidence = batch._evidence(SimpleNamespace(stages=stages))
+    assert (evidence["answer_page"], evidence["chunk_page"]) == (3, 2)
+
+    item = batch.QuestionResult("q?", "a", "no-failure", None, None, evidence, None)
+    result = batch.BatchResult(results=(item,), counts={b: 0 for b in BUCKETS} | {"no-failure": 1})
+    assert "page 3" in render_batch_report(result) and "page 2" not in render_batch_report(result)
+    row = batch_to_json(result)["questions"][0]["evidence"]
+    assert (row["answer_page"], row["chunk_page"]) == (3, 2)
+
+
+def test_empty_set_builds_no_forward_pass(monkeypatch, tmp_path, capfd, no_network):
+    def boom(*a, **k):
+        raise AssertionError("forward pass built for an empty question set")
+
+    monkeypatch.setattr(batch, "get_loader", boom)
+    monkeypatch.setattr(batch, "Chunker", boom)
+    monkeypatch.setattr(batch, "LocalEmbeddingsIndexer", boom)
+    monkeypatch.setattr(batch, "Retriever", boom)
+
+    result = run_batch(PDF, CFG, [])
+    assert result.total == 0 and dict(result.counts) == {b: 0 for b in BUCKETS}
+
+    empty = tmp_path / "empty.json"
+    empty.write_text("[]", encoding="utf-8")
+    assert cli.main(["batch", str(PDF), str(empty)]) == 0
+    out = capfd.readouterr().out
+    assert "Failure distribution (0 questions)" in out and "no questions" in out
+
+
 # --- embedding-dependent ---------------------------------------------------
 
 

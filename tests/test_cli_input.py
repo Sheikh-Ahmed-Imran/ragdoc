@@ -189,3 +189,49 @@ def test_empty_answer_file_is_usage_error(base, content, tmp_path, no_pipeline, 
     assert captured.err.startswith("ragdoc: error:")
     assert "empty" in captured.err
     assert captured.out == ""
+
+
+# --- a UTF-8 BOM in the answer file is ignored ---------------------------------
+
+BOM = b"\xef\xbb\xbf"
+
+
+def _bom_file(tmp_path, text, name="bom.txt"):
+    path = tmp_path / name
+    path.write_bytes(BOM + text.encode("utf-8"))
+    return str(path)
+
+
+def test_diagnose_bom_answer_file_matches_bom_free(monkeypatch, tmp_path):
+    seen = {}
+    _stub_diagnose(monkeypatch, seen)
+    parser = cli.build_parser()
+
+    cli.run(parser.parse_args(["diagnose", "doc.pdf", "Q?", "--answer-file",
+                               _bom_file(tmp_path, "the answer\n")]))
+
+    assert seen["answer"] == "the answer"
+    assert "﻿" not in seen["answer"]
+
+
+def test_compare_bom_answer_file_matches_bom_free(tmp_path, capfd):
+    pdf, answer = _two_column()
+    plain = _answer_file(tmp_path, answer + "\n")
+    assert cli.main(["compare", pdf, "--answer-file", plain]) == 0
+    expected = capfd.readouterr().out
+
+    assert cli.main(["compare", pdf, "--answer-file",
+                     _bom_file(tmp_path, answer + "\n")]) == 0
+    assert capfd.readouterr().out == expected
+    assert expected.strip()
+
+
+@pytest.mark.parametrize("base", [["compare", "doc.pdf"], ["diagnose", "doc.pdf", "Q?"]])
+@pytest.mark.parametrize("content", ["", "  \n\t\n"])
+def test_bom_only_or_bom_plus_whitespace_is_usage_error(base, content, tmp_path,
+                                                        no_pipeline, capfd):
+    assert cli.main(base + ["--answer-file", _bom_file(tmp_path, content)]) == 2
+    captured = capfd.readouterr()
+    assert captured.err.startswith("ragdoc: error:")
+    assert "empty" in captured.err
+    assert captured.out == ""

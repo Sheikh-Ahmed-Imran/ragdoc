@@ -45,6 +45,30 @@ def test_one_result_per_loader_in_given_order():
     assert [r.loader for r in compare_loaders(pdf, answer, rev)] == rev
 
 
+def test_repeated_name_runs_once_and_gives_one_row(monkeypatch):
+    import ragdoc.compare as compare_mod
+
+    pdf, answer = _case("control")
+    calls = []
+    real_get = compare_mod.get
+    monkeypatch.setattr(compare_mod, "get", lambda n: calls.append(n) or real_get(n))
+    results = compare_loaders(pdf, answer, ["pymupdf", "pymupdf"])
+    assert [r.loader for r in results] == ["pymupdf"]
+    assert calls == ["pymupdf"]
+
+
+def test_mixed_with_repeat_one_row_per_distinct_in_first_occurrence_order():
+    pdf, answer = _case("control")
+    got = [r.loader for r in compare_loaders(pdf, answer, ["pymupdf", "pypdf", "pymupdf"])]
+    assert got == ["pymupdf", "pypdf"]
+
+
+def test_repeat_does_not_mask_unknown_name():
+    pdf, answer = _case("control")
+    with pytest.raises(UnknownLoaderError):
+        compare_loaders(pdf, answer, ["pymupdf", "pymupdf", "nope"])
+
+
 def test_default_is_all_registered():
     pdf, answer = _case("control")
     assert {r.loader for r in compare_loaders(pdf, answer)} == set(ORDER)
