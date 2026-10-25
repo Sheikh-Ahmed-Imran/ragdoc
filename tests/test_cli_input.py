@@ -156,3 +156,36 @@ def test_answer_file_is_read_as_utf8(monkeypatch, tmp_path):
     path = _answer_file(tmp_path, "café — “quoted”\n")
     assert cli.main(["compare", "doc.pdf", "--answer-file", path]) == 0
     assert seen["answer"] == "café — “quoted”"
+
+
+# --- empty / whitespace-only answer is a usage error ---------------------------
+
+@pytest.fixture
+def no_pipeline(monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("pipeline work ran for an empty answer")
+    monkeypatch.setattr(cli, "get_loader", boom)
+    monkeypatch.setattr(cli, "compare_loaders", boom)
+    monkeypatch.setattr(cli, "LocalEmbeddingsIndexer", boom)
+
+
+@pytest.mark.parametrize("base", [["compare", "doc.pdf"], ["diagnose", "doc.pdf", "Q?"]])
+@pytest.mark.parametrize("answer", ["", "   ", "\t\n"])
+def test_empty_positional_answer_is_usage_error(base, answer, no_pipeline, capfd):
+    assert cli.main(base + [answer]) == 2
+    captured = capfd.readouterr()
+    assert captured.err.startswith("ragdoc: error:")
+    assert "empty" in captured.err
+    assert captured.err.count("\n") == 1
+    assert captured.out == ""
+
+
+@pytest.mark.parametrize("base", [["compare", "doc.pdf"], ["diagnose", "doc.pdf", "Q?"]])
+@pytest.mark.parametrize("content", ["", "  \n\t\n"])
+def test_empty_answer_file_is_usage_error(base, content, tmp_path, no_pipeline, capfd):
+    path = _answer_file(tmp_path, content)
+    assert cli.main(base + ["--answer-file", path]) == 2
+    captured = capfd.readouterr()
+    assert captured.err.startswith("ragdoc: error:")
+    assert "empty" in captured.err
+    assert captured.out == ""
