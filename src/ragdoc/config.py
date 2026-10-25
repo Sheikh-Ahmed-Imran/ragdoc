@@ -46,3 +46,9 @@ class RunConfig:
     prepend_section_context: bool = False
     embedding_model: str = "all-MiniLM-L6-v2"
     top_k: int = 10
+
+    def __post_init__(self) -> None:
+        # A cutoff below 1 can never contain any rank, so ``rank`` would blame
+        # retrieval for what is a configuration typo. Fail at construction.
+        if self.top_k < 1:
+            raise ValueError(f"top_k must be >= 1, got {self.top_k}")

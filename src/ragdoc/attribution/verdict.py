@@ -308,8 +308,11 @@ def _run_rank(state: RunState) -> CheckResult:
             "rank needs a target chunk from a passing survive"
         )
 
-    target_id = survived.evidence.get("target_chunk_id")
-    if target_id is None:
+    # Every chunk holding a surviving copy; rank measures the best-ranking one.
+    target_id = survived.evidence.get("target_chunk_ids") or survived.evidence.get(
+        "target_chunk_id"
+    )
+    if not target_id:
         return CheckResult.unevaluated(
             "survive passed without a target chunk id in its evidence"
         )

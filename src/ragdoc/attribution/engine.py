@@ -149,12 +149,15 @@ def _run_survive(state: RunState) -> CheckResult:
         return CheckResult.unevaluated(
             "survive needs a located span from a passing locate"
         )
-    span = located.evidence.get("span")
-    if span is None:
+    spans = located.evidence.get("spans")
+    if not spans:
+        single = located.evidence.get("span")
+        spans = (single,) if single is not None else ()
+    if not spans:
         return CheckResult.unevaluated(
             "locate passed without a span in its evidence"
         )
-    return checks.survive(span, state.chunks)
+    return checks.survive(spans, state.chunks)
 
 
 #: The checks T-004 wires, in run order. T-006 appends a ``rank`` check for the
@@ -163,6 +166,33 @@ DEFAULT_CHECKS: tuple[Check, ...] = (
     Check(name="locate", stage="extraction", run=_run_locate),
     Check(name="survive", stage="chunking", run=_run_survive),
 )
+
+
+def _retarget_outcomes(
+    outcomes: list[CheckOutcome], doc: ExtractedDoc
+) -> list[CheckOutcome]:
+    """Point ``locate``/``survive`` evidence at the copy ``rank`` judged.
+
+    ``rank`` picks the best-ranking chunk among ``survive``'s candidates. The
+    reported span/page/snippet, ``context_missing`` flag and target chunk must
+    describe that same copy, so the two earlier results are rewritten for it.
+    With no ``rank`` result (the offline sequence) the earliest copy stands.
+    """
+    by_check = {o.check: o for o in outcomes}
+    locate_o, survive_o, rank_o = (by_check.get(n) for n in ("locate", "survive", "rank"))
+    if locate_o is None or survive_o is None or rank_o is None:
+        return outcomes
+    chosen = rank_o.result.evidence.get("target_chunk_id")
+    if chosen is None:
+        return outcomes
+    new_locate, new_survive = checks.retarget(
+        locate_o.result, survive_o.result, chosen, doc
+    )
+    swap = {
+        "locate": CheckOutcome(locate_o.check, locate_o.stage, new_locate),
+        "survive": CheckOutcome(survive_o.check, survive_o.stage, new_survive),
+    }
+    return [swap.get(o.check, o) for o in outcomes]
 
 
 class AttributionEngine:
@@ -228,6 +258,8 @@ class AttributionEngine:
                 elif result.is_unevaluated:
                     stopped = True
                     withheld = True
+
+        outcomes = _retarget_outcomes(outcomes, doc)
 
         return EngineResult(
             outcomes=tuple(outcomes),
