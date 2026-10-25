@@ -55,6 +55,8 @@ class LoaderResult:
             40 characters of context each side, at most ``TEXT_HEAD_MAX``
             characters (ellipses included), ``…``-marked where clipped; ``None``
             on a miss, an unevaluated result or an empty extraction.
+        empty_pages: 1-based pages this loader extracted no text from
+            (``ExtractedDoc.empty_pages``); advisory only.
     """
 
     loader: str
@@ -66,6 +68,7 @@ class LoaderResult:
     page_count: int
     text_head: str = ""
     found_snippet: Optional[str] = None
+    empty_pages: tuple[int, ...] = ()
 
 
 def _matched_window(text: str, start: int, end: int) -> str:
@@ -131,6 +134,7 @@ def compare_loaders(
                 found_snippet=(
                     _matched_window(doc.text, span.start, span.end) if span is not None else None
                 ),
+                empty_pages=doc.empty_pages,
             )
         )
     return results

@@ -103,6 +103,14 @@ def render_comparison(
 
     lines = [fmt(rows[0]), "  ".join("-" * w for w in widths)]
     lines += [fmt(r) for r in rows[1:]]
+    advisory = [
+        f"{r.loader}: {len(r.empty_pages)} page(s) had no extractable text: "
+        + ", ".join(f"p.{n}" for n in r.empty_pages)
+        for r in results
+        if r.empty_pages
+    ]
+    if advisory:
+        lines += [""] + advisory
     if verbose:
         lines += _verbose_block(results, symbols)
     return "\n".join(lines)

@@ -215,3 +215,54 @@ def test_verbose_find_on_two_column_shows_matched_text_not_head(no_network):
         chunk = next(c for c in out.split("\n\n")[1:] if c.splitlines()[0] == name)
         line = next(l for l in chunk.splitlines() if "extracted:" in l)
         assert r.found_snippet.replace("\n", "\\n") in line
+
+
+# --- T-016: per-loader empty-page advisory ---------------------------------
+
+
+def _doc(page_texts):
+    from ragdoc.artifacts import CharSpan, ExtractedDoc, PageSpan
+
+    text, page_map, pos = "", [], 0
+    for i, t in enumerate(page_texts, start=1):
+        page_map.append(PageSpan(i, CharSpan(pos, pos + len(t))))
+        text += t
+        pos += len(t)
+    return ExtractedDoc(text=text, page_map=page_map)
+
+
+class _Stub:
+    def __init__(self, doc):
+        self._doc = doc
+
+    def load(self, _path):
+        return self._doc
+
+
+def _stub_compare(monkeypatch, docs):
+    import ragdoc.compare as compare_mod
+
+    monkeypatch.setattr(compare_mod, "get", lambda n: _Stub(docs[n]))
+    return compare_loaders("x.pdf", "answer", list(docs))
+
+
+def test_empty_pages_per_loader_distinguishable(monkeypatch):
+    results = _stub_compare(
+        monkeypatch,
+        {
+            "a": _doc(["answer", "", "text", "", "more"]),
+            "b": _doc(["answer", "t", "text", "t", "more"]),
+            "c": _doc(["answer", "", "text", "t", "more"]),
+        },
+    )
+    assert [r.empty_pages for r in results] == [(2, 4), (), (2,)]
+    out = render_comparison(results)
+    assert "a: 2 page(s) had no extractable text: p.2, p.4" in out
+    assert "c: 1 page(s) had no extractable text: p.2" in out
+    assert "b:" not in out
+
+
+def test_all_text_pdf_has_no_advisory(monkeypatch):
+    results = _stub_compare(monkeypatch, {"a": _doc(["answer", "x"]), "b": _doc(["answer", "y"])})
+    assert "no extractable text" not in render_comparison(results)
+    assert "no extractable text" not in render_comparison(results, verbose=True)
