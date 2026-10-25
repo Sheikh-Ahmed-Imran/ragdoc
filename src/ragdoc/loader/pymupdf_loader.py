@@ -29,7 +29,7 @@ except ImportError:  # pragma: no cover - older PyMuPDF only ships ``fitz``.
     import fitz as pymupdf
 
 from ragdoc.artifacts import CharSpan, ExtractedDoc, PageSpan
-from ragdoc.loader import Loader
+from ragdoc.loader import Loader, LoaderError
 
 __all__ = ["PyMuPDFLoader"]
 
@@ -49,6 +49,7 @@ class PyMuPDFLoader(Loader):
 
         Raises:
             FileNotFoundError: if ``path`` does not point at an existing file.
+            LoaderError: if the file exists but cannot be read or parsed as a PDF.
         """
         pdf_path = Path(path)
         if not pdf_path.is_file():
@@ -58,13 +59,24 @@ class PyMuPDFLoader(Loader):
         page_map: list[PageSpan] = []
         offset = 0
 
-        with pymupdf.open(pdf_path) as doc:
-            for index, page in enumerate(doc, start=1):
-                page_text = page.get_text()
-                start = offset
-                end = start + len(page_text)
-                parts.append(page_text)
-                page_map.append(PageSpan(page=index, span=CharSpan(start, end)))
-                offset = end
+        try:
+            with pymupdf.open(pdf_path) as doc:
+                # PyMuPDF sniffs content and also opens images, XPS, EPUB, ...
+                # as "documents"; only a real PDF is accepted here.
+                if not doc.is_pdf:
+                    raise LoaderError(f"{pdf_path} is not a readable PDF: not in PDF format")
+                for index, page in enumerate(doc, start=1):
+                    page_text = page.get_text()
+                    start = offset
+                    end = start + len(page_text)
+                    parts.append(page_text)
+                    page_map.append(PageSpan(page=index, span=CharSpan(start, end)))
+                    offset = end
+        except (
+            pymupdf.FileDataError,
+            pymupdf.EmptyFileError,
+            pymupdf.mupdf.FzErrorFormat,  # content sniffed as a format but malformed
+        ) as exc:
+            raise LoaderError(f"{pdf_path} is not a readable PDF: {exc}") from exc
 
         return ExtractedDoc(text="".join(parts), page_map=page_map)

@@ -31,7 +31,17 @@ from pathlib import Path
 
 from ragdoc.artifacts import ExtractedDoc
 
-__all__ = ["Loader", "UnknownLoaderError", "register", "get", "names"]
+__all__ = ["Loader", "LoaderError", "UnknownLoaderError", "register", "get", "names"]
+
+
+class LoaderError(ValueError):
+    """The file exists but could not be read or parsed as a PDF.
+
+    Raised by every loader in place of its extraction library's own exception
+    (corrupt PDF, empty file, another format renamed to ``.pdf``). It subclasses
+    :class:`ValueError`, so the CLI reports it as a one-line ``ragdoc: error:``
+    message with exit code 2 and no traceback.
+    """
 
 
 class Loader(ABC):
@@ -46,6 +56,9 @@ class Loader(ABC):
       came from.
     * No network access, and deterministic: the same PDF produces the same text
       and the same map.
+    * :meth:`load` raises :class:`LoaderError` when the file exists but cannot be
+      read or parsed as a PDF, and :class:`FileNotFoundError` when it does not
+      exist.
 
     :attr:`name` identifies the implementation and is the value recorded in
     :attr:`RunConfig.loader`; a page position is only meaningful paired with the
@@ -66,6 +79,10 @@ class Loader(ABC):
             An :class:`ExtractedDoc` whose ``text`` is the full extracted text
             and whose ``page_map`` maps every character offset in that text back
             to its 1-based page number.
+
+        Raises:
+            FileNotFoundError: if ``path`` does not point at an existing file.
+            LoaderError: if the file exists but cannot be read or parsed as a PDF.
         """
         raise NotImplementedError
 
