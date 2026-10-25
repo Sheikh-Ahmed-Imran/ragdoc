@@ -2,6 +2,8 @@
 
 from dataclasses import replace
 
+import pytest
+
 from ragdoc import sweep as sweep_mod
 from ragdoc.batch import BatchResult, PreparedBatch, QuestionPair
 from ragdoc.config import RunConfig
@@ -71,3 +73,29 @@ def test_duplicate_values_collapse():
     assert len(sweep_mod.build_grid(chunk_sizes=[500, 500])) == 1
     assert sweep_mod.count_forward_passes(
         [RunConfig(top_k=1), replace(RunConfig(), top_k=2)]) == 1
+
+
+def test_invalid_pair_rejected_before_any_forward_pass(monkeypatch):
+    calls = _fake(monkeypatch)
+    with pytest.raises(ValueError, match=r"chunk_size=100, overlap=200"):
+        sweep_mod.run_sweep("d.pdf", PAIRS, chunk_sizes=[500, 100], overlaps=[200])
+    assert calls == {"prepare": [], "score": []}
+
+
+@pytest.mark.parametrize(
+    "chunk_sizes, overlaps, pair",
+    [
+        ([100], [200], "chunk_size=100, overlap=200"),
+        ([100], [100], "chunk_size=100, overlap=100"),
+        ([500], [0, -5], "chunk_size=500, overlap=-5"),
+        ([500, 0], [0], "chunk_size=0, overlap=0"),
+        ([-10], [0], "chunk_size=-10, overlap=0"),
+    ],
+)
+def test_build_grid_rejects_invalid_pair(chunk_sizes, overlaps, pair):
+    with pytest.raises(ValueError, match=pair):
+        sweep_mod.build_grid(chunk_sizes=chunk_sizes, overlaps=overlaps)
+
+
+def test_valid_grid_unaffected():
+    assert len(sweep_mod.build_grid(chunk_sizes=[500, 800], overlaps=[0, 50])) == 4

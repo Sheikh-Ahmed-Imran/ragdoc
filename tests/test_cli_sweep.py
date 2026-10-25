@@ -93,3 +93,17 @@ def test_other_subcommands_still_parse():
     assert parser.parse_args(["batch", "d.pdf", "q.json"]).top_k == 10
     assert parser.parse_args(["diagnose", "d.pdf", "Q", "A"]).chunk_size == 500
     assert parser.parse_args(["compare", "d.pdf", "A"]).loaders is None
+
+
+@pytest.mark.parametrize("sizes", ["100", "500,100"])
+def test_invalid_pair_exits_2_without_progress(monkeypatch, tmp_path, capfd, sizes):
+    seen = {}
+    _stub(monkeypatch, seen)
+    code = cli.main(["sweep", "d.pdf", _questions(tmp_path), "--chunk-size", sizes,
+                     "--overlap", "200"])
+    captured = capfd.readouterr()
+    assert code == 2
+    assert "chunk_size=100, overlap=200" in captured.err
+    assert "Sweep:" not in captured.out and "[1/" not in captured.err
+    assert "Traceback" not in captured.err
+    assert seen == {}

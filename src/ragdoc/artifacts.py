@@ -100,6 +100,15 @@ class ExtractedDoc:
     text: str
     page_map: Sequence[PageSpan] = field(default_factory=list)
 
+    @property
+    def empty_pages(self) -> tuple[int, ...]:
+        """1-based numbers of pages that yielded no text, in page-map order.
+
+        A page with a zero-length span produced nothing extractable (e.g. a
+        scanned image page). Derived from :attr:`page_map`; extracts nothing new.
+        """
+        return tuple(p.page for p in self.page_map if p.span.length == 0)
+
     def page_at(self, offset: int) -> Optional[int]:
         """Return the 1-based page number containing ``offset``, or ``None``.
 

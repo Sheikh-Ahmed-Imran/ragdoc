@@ -55,6 +55,17 @@ def _values(given: Optional[Sequence], default) -> list:
     return unique
 
 
+def _check_chunking(chunk_size: int, overlap: int) -> None:
+    # Same rule as Chunker's checks, applied up front so a bad pair rejects the
+    # whole sweep before any forward pass runs.
+    if chunk_size <= 0 or overlap < 0 or overlap >= chunk_size:
+        raise ValueError(
+            f"invalid sweep pair (chunk_size={chunk_size}, overlap={overlap}): "
+            "chunk_size must be positive, overlap must not be negative, "
+            "and overlap must be smaller than chunk_size"
+        )
+
+
 def build_grid(
     *,
     chunk_sizes: Optional[Sequence[int]] = None,
@@ -63,10 +74,17 @@ def build_grid(
     embedding_models: Optional[Sequence[str]] = None,
     prepend_section_context: Optional[Sequence[bool]] = None,
 ) -> list[RunConfig]:
-    """Cartesian product of the value lists, ``top_k`` varying fastest."""
+    """Cartesian product of the value lists, ``top_k`` varying fastest.
+
+    Raises ``ValueError`` naming the first invalid ``(chunk_size, overlap)`` pair.
+    """
+    sizes = _values(chunk_sizes, _DEFAULTS.chunk_size)
+    overlap_values = _values(overlaps, _DEFAULTS.overlap)
+    for chunk_size, overlap in itertools.product(sizes, overlap_values):
+        _check_chunking(chunk_size, overlap)
     product = itertools.product(
-        _values(chunk_sizes, _DEFAULTS.chunk_size),
-        _values(overlaps, _DEFAULTS.overlap),
+        sizes,
+        overlap_values,
         _values(prepend_section_context, _DEFAULTS.prepend_section_context),
         _values(embedding_models, _DEFAULTS.embedding_model),
         _values(top_ks, _DEFAULTS.top_k),

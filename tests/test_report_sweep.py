@@ -88,6 +88,21 @@ def test_other_knobs_keep_grid_order_after_top_k():
         assert rank_entries(SweepResult(entries, 2, 2))[0] == 0
 
 
+@pytest.mark.parametrize("order", [((500, 5), (800, 10)), ((800, 10), (500, 5))])
+def test_smaller_top_k_wins_even_when_other_knobs_differ(order):
+    # The tie-break is global (spec addendum 2026-10-25), not limited to
+    # configs that differ only in top_k. Inspected: no test here asserts the
+    # superseded "differing chunk_size keeps grid order despite smaller top_k".
+    batch = _batch(2, [1])
+    entries = tuple(
+        SweepEntry(RunConfig(chunk_size=size, top_k=k), batch) for size, k in order
+    )
+    result = SweepResult(entries, 2, 2)
+    winner = rank_entries(result)[0]
+    assert result.entries[winner].config.top_k == 5
+    assert result.entries[winner].config.chunk_size == 500
+
+
 def test_unknown_objective_rejected():
     with pytest.raises(ValueError):
         rank_entries(RESULT, "bogus")

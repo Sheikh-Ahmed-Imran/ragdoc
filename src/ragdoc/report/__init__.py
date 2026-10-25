@@ -14,7 +14,7 @@ it is printed plainly.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Sequence
 
 from ragdoc.artifacts import CheckStatus
 from ragdoc.attribution.verdict import StageReport, Verdict
@@ -134,11 +134,17 @@ def render_report(
     config: RunConfig,
     verbose: bool = False,
     symbols: Symbols = UNICODE,
+    empty_pages: Sequence[int] = (),
+    total_pages: Optional[int] = None,
 ) -> str:
     """Render the four-row table, VERDICT, FIX and the run configuration.
 
     With ``verbose=True`` each evaluated stage row is followed by a curated
     subset of its check evidence; the default output is unchanged.
+
+    A non-empty ``empty_pages`` adds one advisory line (whatever the verdict,
+    verbose or not) naming pages that yielded no extractable text. It never
+    alters a verdict. ``total_pages`` is the document's page count.
     """
     top_k = config.top_k
     lines = []
@@ -160,6 +166,12 @@ def render_report(
     else:
         lines.append(f"VERDICT: {verdict.stage} {symbols.not_reached} {verdict.reason}")
         lines.append(f"FIX: {verdict.fix}")
+
+    if empty_pages:
+        pages = ", ".join(f"p.{n}" for n in empty_pages)
+        of_total = f" of {total_pages}" if total_pages else ""
+        lines.append("")
+        lines.append(f"{len(empty_pages)}{of_total} pages had no extractable text: {pages}")
 
     lines += [
         "",

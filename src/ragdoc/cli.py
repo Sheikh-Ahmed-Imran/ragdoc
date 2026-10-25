@@ -265,7 +265,14 @@ def run(args: argparse.Namespace) -> str:
     )
     verdict = compose_verdict(result)
     symbols = _symbols_for(args)
-    report = render_report(verdict, config, verbose=args.verbose, symbols=symbols)
+    # Only passed when present, so the common (all-text) call is unchanged.
+    advisory = {}
+    empty_pages = getattr(doc, "empty_pages", ())
+    if empty_pages:
+        advisory = {"empty_pages": empty_pages, "total_pages": len(doc.page_map)}
+    report = render_report(
+        verdict, config, verbose=args.verbose, symbols=symbols, **advisory
+    )
     if args.show_retrieved:
         target_id = _target_chunk_id(verdict)
         report += "\n\n" + render_retrieved(
