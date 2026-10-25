@@ -21,9 +21,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from pypdf import PdfReader
+from pypdf.errors import EmptyFileError, PdfReadError
 
 from ragdoc.artifacts import CharSpan, ExtractedDoc, PageSpan
-from ragdoc.loader import Loader
+from ragdoc.loader import Loader, LoaderError
 
 __all__ = ["PyPDFLoader"]
 
@@ -38,6 +39,7 @@ class PyPDFLoader(Loader):
 
         Raises:
             FileNotFoundError: if ``path`` does not point at an existing file.
+            LoaderError: if the file exists but cannot be read or parsed as a PDF.
         """
         pdf_path = Path(path)
         if not pdf_path.is_file():
@@ -47,13 +49,16 @@ class PyPDFLoader(Loader):
         page_map: list[PageSpan] = []
         offset = 0
 
-        reader = PdfReader(pdf_path)
-        for index, page in enumerate(reader.pages, start=1):
-            page_text = page.extract_text() or ""
-            start = offset
-            end = start + len(page_text)
-            parts.append(page_text)
-            page_map.append(PageSpan(page=index, span=CharSpan(start, end)))
-            offset = end
+        try:
+            reader = PdfReader(pdf_path)
+            for index, page in enumerate(reader.pages, start=1):
+                page_text = page.extract_text() or ""
+                start = offset
+                end = start + len(page_text)
+                parts.append(page_text)
+                page_map.append(PageSpan(page=index, span=CharSpan(start, end)))
+                offset = end
+        except (PdfReadError, EmptyFileError) as exc:
+            raise LoaderError(f"{pdf_path} is not a readable PDF: {exc}") from exc
 
         return ExtractedDoc(text="".join(parts), page_map=page_map)

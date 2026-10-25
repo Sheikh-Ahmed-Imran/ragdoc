@@ -21,9 +21,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pdfplumber
+from pdfminer.pdfdocument import PDFException
+from pdfminer.pdfparser import PDFSyntaxError
+from pdfplumber.utils.exceptions import PdfminerException
 
 from ragdoc.artifacts import CharSpan, ExtractedDoc, PageSpan
-from ragdoc.loader import Loader
+from ragdoc.loader import Loader, LoaderError
 
 __all__ = ["PdfPlumberLoader"]
 
@@ -38,6 +41,7 @@ class PdfPlumberLoader(Loader):
 
         Raises:
             FileNotFoundError: if ``path`` does not point at an existing file.
+            LoaderError: if the file exists but cannot be read or parsed as a PDF.
         """
         pdf_path = Path(path)
         if not pdf_path.is_file():
@@ -47,14 +51,17 @@ class PdfPlumberLoader(Loader):
         page_map: list[PageSpan] = []
         offset = 0
 
-        with pdfplumber.open(pdf_path) as pdf:
-            for index, page in enumerate(pdf.pages, start=1):
-                # extract_text() returns None for a page with no text layer.
-                page_text = page.extract_text() or ""
-                start = offset
-                end = start + len(page_text)
-                parts.append(page_text)
-                page_map.append(PageSpan(page=index, span=CharSpan(start, end)))
-                offset = end
+        try:
+            with pdfplumber.open(pdf_path) as pdf:
+                for index, page in enumerate(pdf.pages, start=1):
+                    # extract_text() returns None for a page with no text layer.
+                    page_text = page.extract_text() or ""
+                    start = offset
+                    end = start + len(page_text)
+                    parts.append(page_text)
+                    page_map.append(PageSpan(page=index, span=CharSpan(start, end)))
+                    offset = end
+        except (PDFSyntaxError, PDFException, PdfminerException) as exc:
+            raise LoaderError(f"{pdf_path} is not a readable PDF: {exc}") from exc
 
         return ExtractedDoc(text="".join(parts), page_map=page_map)
