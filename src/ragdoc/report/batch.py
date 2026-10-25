@@ -24,13 +24,12 @@ import statistics
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 from ragdoc.report import format_metric, precision_at_k, reciprocal_rank
+from ragdoc.report.symbols import UNICODE, Symbols
 
 if TYPE_CHECKING:
     from ragdoc.batch import BatchResult, QuestionResult
 
 __all__ = ["batch_to_json", "render_batch_report"]
-
-_NONE = "—"
 
 
 def _jsonable(value: Any) -> Any:
@@ -123,7 +122,7 @@ def _evidence_detail(item: "QuestionResult") -> str:
     return "; ".join(parts)
 
 
-def render_batch_report(batch: "BatchResult") -> str:
+def render_batch_report(batch: "BatchResult", symbols: Symbols = UNICODE) -> str:
     """Render the distribution (headline) then one line per question."""
     total = len(batch.results)
     lines = [f"Failure distribution ({total} question{'s' if total != 1 else ''}):"]
@@ -134,7 +133,7 @@ def render_batch_report(batch: "BatchResult") -> str:
     lines += [""] + _metrics_lines(retrieval_metrics(batch))
     lines += ["", "Questions:"]
     for index, item in enumerate(batch.results, start=1):
-        stage = item.stage if item.stage else _NONE
+        stage = item.stage if item.stage else symbols.not_reached
         row = f"  {index}. [{item.bucket}] {item.question}"
         if item.stage and item.stage != item.bucket:
             row += f"  (stage: {stage})"

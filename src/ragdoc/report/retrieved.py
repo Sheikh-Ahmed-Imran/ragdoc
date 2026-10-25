@@ -15,15 +15,14 @@ from typing import Optional, Sequence
 
 from ragdoc.artifacts import Chunk, Ranking, RankedChunk
 from ragdoc.report.compare import _escape
+from ragdoc.report.symbols import UNICODE, Symbols
 
 __all__ = ["render_retrieved", "SNIPPET_MAX"]
 
 #: Default bound on a row's snippet, in characters (after escaping).
 SNIPPET_MAX = 120
 
-_MARKER = "← your answer"
-_GAP = "⋮"
-_ELLIPSIS = "…"
+_MARKER = "your answer"
 _NO_TARGET_NOTE = "(the answer was not located in a single chunk, so none is marked)"
 # Control characters _escape leaves alone, plus the Unicode line separators.
 _OTHER_BREAKS = re.compile("[\x00-\x1f\x7f\x85  ]")
@@ -34,7 +33,7 @@ def _one_line(text: str) -> str:
     return _OTHER_BREAKS.sub(lambda m: f"\\x{ord(m.group()):02x}", escaped)
 
 
-def _snippet(text: str, limit: int) -> str:
+def _snippet(text: str, limit: int, symbols: Symbols) -> str:
     shown = _one_line(text)
     if len(shown) <= limit:
         return f'"{shown}"'
@@ -43,7 +42,7 @@ def _snippet(text: str, limit: int) -> str:
     trailing = len(cut) - len(cut.rstrip("\\"))
     if trailing % 2:
         cut = cut[:-1]
-    return f'"{cut}"{_ELLIPSIS}'
+    return f'"{cut}"{symbols.ellipsis}'
 
 
 def _row(
@@ -52,16 +51,17 @@ def _row(
     by_id: dict[str, Chunk],
     target_chunk_id: Optional[str],
     limit: int,
+    symbols: Symbols,
 ) -> Optional[str]:
     chunk = by_id.get(entry.chunk_id)
     if chunk is None:
         return None
     line = (
         f"  {rank:>3}. {entry.chunk_id}  p.{chunk.page}  "
-        f"{entry.score:.4f}  {_snippet(chunk.text, limit)}"
+        f"{entry.score:.4f}  {_snippet(chunk.text, limit, symbols)}"
     )
     if entry.chunk_id == target_chunk_id:
-        line += f"  {_MARKER}"
+        line += f"  {symbols.pointer} {_MARKER}"
     return line
 
 
@@ -71,6 +71,7 @@ def render_retrieved(
     target_chunk_id: Optional[str],
     top_k: int,
     limit: int = SNIPPET_MAX,
+    symbols: Symbols = UNICODE,
 ) -> str:
     """Render the ``top_k`` best-ranked chunks, marking the user's answer chunk.
 
@@ -85,7 +86,7 @@ def render_retrieved(
 
     lines = [f"Retrieved chunks (top {shown} by cosine similarity):"]
     for rank, entry in enumerate(entries[:shown], start=1):
-        row = _row(rank, entry, by_id, target_chunk_id, limit)
+        row = _row(rank, entry, by_id, target_chunk_id, limit, symbols)
         if row is not None:
             lines.append(row)
 
@@ -94,7 +95,7 @@ def render_retrieved(
     else:
         position = ranking.position_of(target_chunk_id)
         if position is not None and position > shown:
-            row = _row(position, entries[position - 1], by_id, target_chunk_id, limit)
+            row = _row(position, entries[position - 1], by_id, target_chunk_id, limit, symbols)
             if row is not None:
-                lines += [f"  {_GAP}", row]
+                lines += [f"  {symbols.gap}", row]
     return "\n".join(lines)

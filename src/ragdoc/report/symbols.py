@@ -29,6 +29,10 @@ class Symbols:
     not_reached: str
     found: str
     miss: str
+    # Prose glyphs the reporters also print; defaulted so positional callers
+    # built before they existed keep working.
+    pointer: str = "←"
+    ellipsis: str = "…"
 
 
 UNICODE = Symbols(
@@ -49,6 +53,8 @@ ASCII = Symbols(
     not_reached="-",
     found="[OK] found",
     miss="[X] MISS",
+    pointer="<-",
+    ellipsis="...",
 )
 
 

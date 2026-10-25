@@ -17,30 +17,29 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Sequence
 
+from ragdoc.report.symbols import UNICODE, Symbols
+
 if TYPE_CHECKING:
     from ragdoc.compare import LoaderResult
 
 __all__ = ["render_comparison"]
 
 _HEADERS = ("loader", "result", "page", "match", "chars", "pages")
-_FOUND = "✓ found"
-_MISS = "✗ MISS"
 _UNEVALUATED = "? not evaluated"
-_NONE = "—"
 
 
-def _row(result: "LoaderResult") -> tuple[str, ...]:
+def _row(result: "LoaderResult", symbols: Symbols) -> tuple[str, ...]:
     if result.found:
-        status = _FOUND
+        status = symbols.found
     elif result.evaluated:
-        status = _MISS
+        status = symbols.miss
     else:
         status = _UNEVALUATED
     return (
         result.loader,
         status,
-        _NONE if result.page is None else str(result.page),
-        result.match or _NONE,
+        symbols.not_reached if result.page is None else str(result.page),
+        result.match or symbols.not_reached,
         str(result.char_count),
         str(result.page_count),
     )
@@ -57,7 +56,7 @@ def _escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
 
 
-def _snippet(result: "LoaderResult") -> str:
+def _snippet(result: "LoaderResult", symbols: Symbols) -> str:
     if result.found and result.found_snippet:
         # The snippet carries its own ellipses where it was clipped.
         return f'"{_escape(result.found_snippet)}"'
@@ -67,22 +66,26 @@ def _snippet(result: "LoaderResult") -> str:
     shown = _escape(head)
     text = f'"{shown}"'
     if len(head) < result.char_count:
-        text += f" … ({len(head)} of {result.char_count} chars)"
+        text += f" {symbols.ellipsis} ({len(head)} of {result.char_count} chars)"
     return text
 
 
-def _verbose_block(results: Sequence["LoaderResult"]) -> list[str]:
+def _verbose_block(results: Sequence["LoaderResult"], symbols: Symbols) -> list[str]:
     lines: list[str] = []
     for r in results:
         lines += ["", r.loader, f"  match attempt: {_attempt(r)}"]
         if r.found and r.found_snippet and r.page is not None:
             lines.append(f"  page:          {r.page}")
-        lines.append(f"  extracted:     {_snippet(r)}")
+        lines.append(f"  extracted:     {_snippet(r, symbols)}")
     return lines
 
 
-def render_comparison(results: Sequence["LoaderResult"], verbose: bool = False) -> str:
-    """Render one table row per loader; a miss is marked ``✗ MISS``.
+def render_comparison(
+    results: Sequence["LoaderResult"],
+    verbose: bool = False,
+    symbols: Symbols = UNICODE,
+) -> str:
+    """Render one table row per loader; a miss is marked with ``symbols.miss``.
 
     Pages are each loader's own numbering and are not comparable across rows
     by character position; no figure other than counts of extracted text is shown.
@@ -92,7 +95,7 @@ def render_comparison(results: Sequence["LoaderResult"], verbose: bool = False) 
     """
     if not results:
         return "No loaders were compared."
-    rows = [_HEADERS] + [_row(r) for r in results]
+    rows = [_HEADERS] + [_row(r, symbols) for r in results]
     widths = [max(len(row[i]) for row in rows) for i in range(len(_HEADERS))]
 
     def fmt(row: tuple[str, ...]) -> str:
@@ -101,5 +104,5 @@ def render_comparison(results: Sequence["LoaderResult"], verbose: bool = False) 
     lines = [fmt(rows[0]), "  ".join("-" * w for w in widths)]
     lines += [fmt(r) for r in rows[1:]]
     if verbose:
-        lines += _verbose_block(results)
+        lines += _verbose_block(results, symbols)
     return "\n".join(lines)

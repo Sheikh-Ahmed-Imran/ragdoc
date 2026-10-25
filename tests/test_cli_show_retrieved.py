@@ -40,7 +40,7 @@ def _stub(monkeypatch, verdict):
     monkeypatch.setattr(cli, "Retriever", _Stub)
     monkeypatch.setattr(cli, "build_engine", lambda: _Stub())
     monkeypatch.setattr(cli, "compose_verdict", lambda r: verdict)
-    monkeypatch.setattr(cli, "render_report", lambda v, c, verbose=False: "REPORT")
+    monkeypatch.setattr(cli, "render_report", lambda v, c, verbose=False, symbols=None: "REPORT")
 
 
 def _run(extra):

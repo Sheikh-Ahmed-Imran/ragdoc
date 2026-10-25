@@ -19,13 +19,10 @@ from typing import Optional
 from ragdoc.artifacts import CheckStatus
 from ragdoc.attribution.verdict import StageReport, Verdict
 from ragdoc.config import RunConfig
+from ragdoc.report.symbols import UNICODE, Symbols
 
 __all__ = ["format_metric", "precision_at_k", "reciprocal_rank", "render_report"]
 
-_NOT_REACHED = "— not reached"
-_PASS = "✓"
-_FAIL = "✗"
-_FLAGGED = "⚑"
 _UNEVALUATED = "? could not be evaluated"
 
 
@@ -71,18 +68,18 @@ def _stage_detail(report: StageReport, top_k: Optional[int]) -> str:
     return ""
 
 
-def _marker(report: StageReport) -> str:
+def _marker(report: StageReport, symbols: Symbols) -> str:
     if report.status is CheckStatus.PASS:
         flagged = (
             report.result is not None
             and report.result.evidence.get("context_missing")
         )
-        return _FLAGGED if flagged else _PASS
+        return symbols.flagged if flagged else symbols.passed
     if report.status is CheckStatus.FAIL:
-        return _FAIL
+        return symbols.fail
     if report.status is CheckStatus.UNEVALUATED:
         return _UNEVALUATED
-    return _NOT_REACHED
+    return f"{symbols.not_reached} not reached"
 
 
 def _span_text(span: object) -> str:
@@ -133,7 +130,10 @@ def _evidence_lines(report: StageReport) -> list[str]:
 
 
 def render_report(
-    verdict: Verdict, config: RunConfig, verbose: bool = False
+    verdict: Verdict,
+    config: RunConfig,
+    verbose: bool = False,
+    symbols: Symbols = UNICODE,
 ) -> str:
     """Render the four-row table, VERDICT, FIX and the run configuration.
 
@@ -144,9 +144,9 @@ def render_report(
     lines = []
     for report in verdict.stages:
         if report.stage == "generation":
-            marker, detail = _NOT_REACHED, ""  # always, in v0
+            marker, detail = f"{symbols.not_reached} not reached", ""  # always, in v0
         else:
-            marker, detail = _marker(report), _stage_detail(report, top_k)
+            marker, detail = _marker(report, symbols), _stage_detail(report, top_k)
         row = f"  {report.stage:<11} {marker}"
         lines.append(f"{row}  {detail}" if detail else row)
         if verbose and report.stage != "generation":
@@ -154,11 +154,11 @@ def render_report(
 
     lines.append("")
     if verdict.withheld:
-        lines.append("VERDICT: withheld — a stage could not be evaluated")
+        lines.append(f"VERDICT: withheld {symbols.not_reached} a stage could not be evaluated")
     elif verdict.stage is None:
         lines.append("VERDICT: no failing stage found")
     else:
-        lines.append(f"VERDICT: {verdict.stage} — {verdict.reason}")
+        lines.append(f"VERDICT: {verdict.stage} {symbols.not_reached} {verdict.reason}")
         lines.append(f"FIX: {verdict.fix}")
 
     lines += [

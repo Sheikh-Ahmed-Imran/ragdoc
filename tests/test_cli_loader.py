@@ -72,7 +72,7 @@ def test_batch_passes_loader_in_config(monkeypatch, tmp_path):
     seen = {}
     monkeypatch.setattr(cli, "execute_batch",
                         lambda pdf, config, pairs: seen.update(config=config) or None)
-    monkeypatch.setattr(cli, "render_batch_report", lambda result: "report")
+    monkeypatch.setattr(cli, "render_batch_report", lambda result, symbols=None: "report")
     q = tmp_path / "q.json"
     q.write_text(json.dumps([{"question": "Q?", "expected_answer": "A"}]), encoding="utf-8")
     cli.run_batch(cli.build_parser().parse_args(
@@ -103,7 +103,7 @@ def test_diagnose_resolves_loader_via_registry(monkeypatch):
     monkeypatch.setattr(cli, "compose_verdict", lambda r: "verdict")
     seen = {}
     monkeypatch.setattr(cli, "render_report",
-                        lambda v, c, verbose=False: seen.update(config=c) or "report")
+                        lambda v, c, verbose=False, symbols=None: seen.update(config=c) or "report")
 
     parser = cli.build_parser()
     cli.run(parser.parse_args(_DIAG))

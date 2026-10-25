@@ -30,7 +30,7 @@ def test_batch_rejects_flag(flag, capfd):
 def _stub_compare(monkeypatch, seen):
     monkeypatch.setattr(cli, "compare_loaders", lambda pdf, ans, loaders: [])
 
-    def fake(results, verbose=False):
+    def fake(results, verbose=False, symbols=None):
         seen["verbose"] = verbose
         return "report"
 
@@ -64,7 +64,7 @@ def test_diagnose_dispatches_verbose(monkeypatch):
     monkeypatch.setattr(cli, "build_engine", lambda: _Stub())
     monkeypatch.setattr(cli, "compose_verdict", lambda r: "verdict")
 
-    def fake(verdict, config, verbose=False):
+    def fake(verdict, config, verbose=False, symbols=None):
         seen["verbose"] = verbose
         return "report"
 

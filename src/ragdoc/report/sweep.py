@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 from ragdoc.report.batch import retrieval_metrics
+from ragdoc.report.symbols import UNICODE, Symbols
 
 if TYPE_CHECKING:
     from ragdoc.sweep import SweepEntry, SweepResult
@@ -88,11 +89,15 @@ def _cell(value: Any) -> str:
     return str(value)
 
 
-def _fmt(value: Optional[float]) -> str:
-    return "—" if value is None else f"{value:.2f}"
+def _fmt(value: Optional[float], symbols: Symbols) -> str:
+    return symbols.not_reached if value is None else f"{value:.2f}"
 
 
-def render_sweep_table(result: "SweepResult", objective: str = "no-failure") -> str:
+def render_sweep_table(
+    result: "SweepResult",
+    objective: str = "no-failure",
+    symbols: Symbols = UNICODE,
+) -> str:
     """One row per config in grid order, the winner marked with ``*``."""
     ranked = rank_entries(result, objective)
     if not ranked:
@@ -107,8 +112,8 @@ def render_sweep_table(result: "SweepResult", objective: str = "no-failure") -> 
             [_cell(getattr(entry.config, attr)) for attr, _ in knobs]
             + [
                 f"{entry.batch.counts.get('no-failure', 0)}/{entry.batch.total}",
-                _fmt(metrics["mrr"]),
-                _fmt(metrics["hit_rate"]),
+                _fmt(metrics["mrr"], symbols),
+                _fmt(metrics["hit_rate"], symbols),
             ]
         )
     widths = [max(len(headers[c]), *(len(r[c]) for r in rows)) for c in range(len(headers))]

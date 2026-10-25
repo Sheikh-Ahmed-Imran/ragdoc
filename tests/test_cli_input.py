@@ -116,7 +116,7 @@ def _stub_diagnose(monkeypatch, seen):
     monkeypatch.setattr(cli, "Retriever", _Stub)
     monkeypatch.setattr(cli, "build_engine", lambda: _Stub())
     monkeypatch.setattr(cli, "compose_verdict", lambda r: "verdict")
-    monkeypatch.setattr(cli, "render_report", lambda v, c, verbose=False: "report")
+    monkeypatch.setattr(cli, "render_report", lambda v, c, verbose=False, symbols=None: "report")
 
 
 def test_diagnose_answer_file_matches_positional(monkeypatch, tmp_path):
@@ -138,7 +138,7 @@ def test_diagnose_answer_file_matches_positional(monkeypatch, tmp_path):
 def test_multiline_answer_file_preserves_interior_and_strips_trailing(monkeypatch, tmp_path):
     seen = {}
     monkeypatch.setattr(cli, "compare_loaders", lambda pdf, ans, loaders: seen.update(answer=ans) or [])
-    monkeypatch.setattr(cli, "render_comparison", lambda results, verbose=False: "report")
+    monkeypatch.setattr(cli, "render_comparison", lambda results, verbose=False, symbols=None: "report")
 
     body = "  indented first line\nsecond line  \n\n  third, after a blank line"
     path = _answer_file(tmp_path, body + "  \n\n\t\n")
@@ -151,7 +151,7 @@ def test_multiline_answer_file_preserves_interior_and_strips_trailing(monkeypatc
 def test_answer_file_is_read_as_utf8(monkeypatch, tmp_path):
     seen = {}
     monkeypatch.setattr(cli, "compare_loaders", lambda pdf, ans, loaders: seen.update(answer=ans) or [])
-    monkeypatch.setattr(cli, "render_comparison", lambda results, verbose=False: "report")
+    monkeypatch.setattr(cli, "render_comparison", lambda results, verbose=False, symbols=None: "report")
 
     path = _answer_file(tmp_path, "café — “quoted”\n")
     assert cli.main(["compare", "doc.pdf", "--answer-file", path]) == 0

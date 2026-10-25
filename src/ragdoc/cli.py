@@ -32,6 +32,7 @@ from ragdoc.report.batch import batch_to_json, render_batch_report
 from ragdoc.report.compare import render_comparison
 from ragdoc.report.retrieved import render_retrieved
 from ragdoc.report.sweep import OBJECTIVES, render_sweep_table, sweep_to_json
+from ragdoc.report.symbols import Symbols, resolve
 from ragdoc.retriever import Retriever
 from ragdoc.sweep import build_grid, count_forward_passes
 from ragdoc.sweep import run_sweep as execute_sweep
@@ -156,6 +157,17 @@ def _add_verbose(parser: argparse.ArgumentParser) -> None:
                         help="also print the evidence behind each verdict")
 
 
+def _add_ascii(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--ascii", action="store_true",
+                        help="draw status symbols in plain ASCII (automatic when the "
+                             "console cannot show Unicode)")
+
+
+def _symbols_for(args: argparse.Namespace) -> Symbols:
+    # Display only: never reaches RunConfig or the engine.
+    return resolve(sys.stdout, force_ascii=args.ascii)
+
+
 def _config_from(args: argparse.Namespace) -> RunConfig:
     return RunConfig(
         chunk_size=args.chunk_size,
@@ -182,6 +194,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_answer(diagnose)
     _add_config_flags(diagnose)
     _add_verbose(diagnose)
+    _add_ascii(diagnose)
     diagnose.add_argument("--show-retrieved", action="store_true",
                           help="also list the top-k chunks the retriever returned, "
                                "marking the chunk that holds your answer")
@@ -194,6 +207,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--loaders", type=_loader_list, default=None, metavar="a,b",
                          help="comma-separated loader names (default: all registered)")
     _add_verbose(compare)
+    _add_ascii(compare)
 
     batch = sub.add_parser(
         "batch", help="run a question set against one PDF and print the failure distribution",
@@ -201,6 +215,7 @@ def build_parser() -> argparse.ArgumentParser:
     batch.add_argument("pdf", help="path to the PDF")
     batch.add_argument("questions", help="path to the JSON question set")
     _add_config_flags(batch)
+    _add_ascii(batch)
     batch.add_argument("--json", dest="json_path", default=None, metavar="PATH",
                        help="also write the structured result to this JSON file")
 
@@ -227,6 +242,7 @@ def build_parser() -> argparse.ArgumentParser:
                             "(default: %(default)s)")
     sweep.add_argument("--json", dest="json_path", default=None, metavar="PATH",
                        help="also write the full per-config results to this JSON file")
+    _add_ascii(sweep)
     return parser
 
 
@@ -246,10 +262,13 @@ def run(args: argparse.Namespace) -> str:
         config=config,
     )
     verdict = compose_verdict(result)
-    report = render_report(verdict, config, verbose=args.verbose)
+    symbols = _symbols_for(args)
+    report = render_report(verdict, config, verbose=args.verbose, symbols=symbols)
     if args.show_retrieved:
         target_id = _target_chunk_id(verdict)
-        report += "\n\n" + render_retrieved(ranking, chunks, target_id, config.top_k)
+        report += "\n\n" + render_retrieved(
+            ranking, chunks, target_id, config.top_k, symbols=symbols
+        )
     return report
 
 
@@ -268,6 +287,7 @@ def run_compare(args: argparse.Namespace) -> str:
     return render_comparison(
         compare_loaders(args.pdf, _resolve_answer(args), args.loaders),
         verbose=args.verbose,
+        symbols=_symbols_for(args),
     )
 
 
@@ -279,7 +299,7 @@ def run_batch(args: argparse.Namespace) -> str:
         payload = json.dumps(batch_to_json(result), indent=2, ensure_ascii=False)
         with open(args.json_path, "w", encoding="utf-8") as handle:
             handle.write(payload + "\n")
-    return render_batch_report(result)
+    return render_batch_report(result, _symbols_for(args))
 
 
 def _emit(text: str) -> None:
@@ -314,7 +334,7 @@ def run_sweep(args: argparse.Namespace) -> str:
                              ensure_ascii=False)
         with open(args.json_path, "w", encoding="utf-8") as handle:
             handle.write(payload + "\n")
-    return render_sweep_table(result, args.objective)
+    return render_sweep_table(result, args.objective, _symbols_for(args))
 
 
 _COMMANDS = {"diagnose": run, "compare": run_compare, "batch": run_batch,
