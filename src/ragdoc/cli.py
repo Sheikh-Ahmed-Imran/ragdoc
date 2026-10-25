@@ -115,15 +115,20 @@ def _resolve_answer(args: argparse.Namespace) -> str:
     if path is not None:
         try:
             with open(path, encoding="utf-8") as handle:
-                return handle.read().rstrip()
+                resolved = handle.read().rstrip()
         except FileNotFoundError:
             raise FileNotFoundError(f"answer file not found: {path}") from None
         except (OSError, UnicodeDecodeError) as exc:
             raise ValueError(f"cannot read answer file {path}: {exc}") from None
-    if positional is None:
+    elif positional is None:
         raise ValueError("no expected answer given: pass it as an argument or "
                          "with --answer-file")
-    return positional
+    else:
+        resolved = positional
+    if not resolved.strip():
+        raise ValueError("the expected answer is empty: there is nothing to "
+                         "locate in the document")
+    return resolved
 
 
 def _add_config_flags(parser: argparse.ArgumentParser) -> None:
