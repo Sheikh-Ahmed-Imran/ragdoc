@@ -20,6 +20,7 @@ discarded; there is no persistence between runs (spec Exclusions).
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING, Optional, Sequence
 
 import numpy as np
@@ -37,6 +38,41 @@ __all__ = ["LocalEmbeddingsIndexer"]
 #: value :class:`~ragdoc.config.RunConfig` records as ``embedding_model`` by
 #: default. Chosen to satisfy the spec's local-embeddings decision.
 DEFAULT_MODEL = "all-MiniLM-L6-v2"
+
+
+_hf_quieted = False
+
+
+def _quiet_hf_once() -> None:
+    """Silence huggingface_hub progress bars and warnings, once per process.
+
+    Best effort: a missing or renamed API is ignored and never breaks a run.
+    """
+    global _hf_quieted
+    if _hf_quieted:
+        return
+    _hf_quieted = True
+    try:
+        import huggingface_hub
+        from huggingface_hub import logging as hf_logging
+
+        huggingface_hub.disable_progress_bars()
+        hf_logging.set_verbosity_error()
+    except Exception:  # cosmetic only
+        pass
+
+
+def _model_cached(name: str) -> bool:
+    """Best-effort local-cache probe (no network); True when unsure."""
+    try:
+        from huggingface_hub import try_to_load_from_cache
+
+        repo_id = name if "/" in name else f"sentence-transformers/{name}"
+        # ``None`` means the file is not in the cache; a path or the
+        # "known missing" sentinel both mean the repo has been looked up before.
+        return try_to_load_from_cache(repo_id, "modules.json") is not None
+    except Exception:  # cosmetic only
+        return True
 
 
 class LocalEmbeddingsIndexer(Indexer):
@@ -87,6 +123,13 @@ class LocalEmbeddingsIndexer(Indexer):
         """
         if self._model is None:
             from sentence_transformers import SentenceTransformer
+
+            _quiet_hf_once()
+            if not _model_cached(self.name):
+                sys.stderr.write(
+                    f"Downloading embedding model '{self.name}' (first run, ~90 MB); "
+                    f"cached offline after this.\n"
+                )
 
             try:
                 self._model = SentenceTransformer(self.name)

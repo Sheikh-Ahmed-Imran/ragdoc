@@ -30,6 +30,8 @@ def broken_model(monkeypatch):
     stub = types.ModuleType("sentence_transformers")
     stub.SentenceTransformer = _Boom
     monkeypatch.setitem(sys.modules, "sentence_transformers", stub)
+    # Pin the cache probe so the first-run notice (T-019) doesn't precede the error line.
+    monkeypatch.setattr("ragdoc.indexer.local_embeddings._model_cached", lambda name: True)
 
 
 def test_model_load_error_is_value_error():
