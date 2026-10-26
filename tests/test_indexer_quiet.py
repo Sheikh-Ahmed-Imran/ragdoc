@@ -3,6 +3,8 @@
 ``sentence_transformers`` and ``huggingface_hub`` are stubbed: no network, no model.
 """
 
+import importlib
+import os
 import sys
 import types
 
@@ -11,6 +13,35 @@ import pytest
 from ragdoc.indexer import ModelLoadError
 from ragdoc.indexer import local_embeddings
 from ragdoc.indexer.local_embeddings import LocalEmbeddingsIndexer
+
+
+# --- the actual suppression mechanism -------------------------------------
+# huggingface_hub/transformers read these env vars at *their* import time, so the
+# env vars (not the runtime disable_* calls) are what truly silences the progress
+# bar and the unauthenticated-requests warning. A real end-to-end run confirmed
+# the runtime calls alone leave the noise; these tests pin the env-var fix so it
+# cannot silently regress again (they need neither torch nor the network).
+
+
+def test_hf_noise_quieted_via_env_at_import(monkeypatch):
+    for var in (
+        "HF_HUB_DISABLE_PROGRESS_BARS",
+        "HF_HUB_VERBOSITY",
+        "TRANSFORMERS_VERBOSITY",
+        "TRANSFORMERS_NO_ADVISORY_WARNINGS",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    importlib.reload(local_embeddings)
+    assert os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] == "1"
+    assert os.environ["HF_HUB_VERBOSITY"] == "error"
+    assert os.environ["TRANSFORMERS_VERBOSITY"] == "error"
+    assert os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] == "1"
+
+
+def test_user_hf_env_is_respected(monkeypatch):
+    monkeypatch.setenv("HF_HUB_VERBOSITY", "info")
+    importlib.reload(local_embeddings)
+    assert os.environ["HF_HUB_VERBOSITY"] == "info"
 
 
 @pytest.fixture

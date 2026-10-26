@@ -20,6 +20,7 @@ discarded; there is no persistence between runs (spec Exclusions).
 
 from __future__ import annotations
 
+import os
 import sys
 from typing import TYPE_CHECKING, Optional, Sequence
 
@@ -33,6 +34,25 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, no runtime import
     from sentence_transformers import SentenceTransformer
 
 __all__ = ["LocalEmbeddingsIndexer"]
+
+
+# Quiet third-party model-load chatter *before* huggingface_hub is imported.
+# huggingface_hub and transformers read these settings at their own import time,
+# so the runtime calls in ``_quiet_hf_once`` (below) fire too late to catch the
+# "Loading weights" progress bar or the "unauthenticated requests to the HF Hub"
+# warning. Setting them here — at this module's import, which runs before the lazy
+# ``from sentence_transformers import ...`` in ``_get_model`` pulls huggingface_hub
+# in — is what actually keeps that chatter out of ragdoc's output. ``setdefault``
+# leaves a value the user set deliberately untouched; the runtime calls remain as
+# a best-effort fallback.
+for _var, _val in (
+    ("HF_HUB_DISABLE_PROGRESS_BARS", "1"),
+    ("HF_HUB_VERBOSITY", "error"),
+    ("TRANSFORMERS_VERBOSITY", "error"),
+    ("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1"),
+):
+    os.environ.setdefault(_var, _val)
+del _var, _val
 
 #: The default local model: small, fast, offline after first download, and the
 #: value :class:`~ragdoc.config.RunConfig` records as ``embedding_model`` by
