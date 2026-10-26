@@ -51,6 +51,8 @@ class PyPDFLoader(Loader):
 
         try:
             reader = PdfReader(pdf_path)
+            if reader.is_encrypted:
+                raise LoaderError(f"encrypted / password-protected PDF: {pdf_path}")
             for index, page in enumerate(reader.pages, start=1):
                 page_text = page.extract_text() or ""
                 start = offset

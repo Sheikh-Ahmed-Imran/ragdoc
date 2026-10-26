@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from typing import Optional, Sequence
 
@@ -300,14 +301,38 @@ def run_compare(args: argparse.Namespace) -> str:
     )
 
 
+def _check_output_path(path: str) -> None:
+    """Fail fast, before any expensive work, if ``path`` cannot be written.
+
+    Raises ValueError (-> ``ragdoc: error:``, exit 2). Never creates anything.
+    """
+    if os.path.isdir(path):
+        raise ValueError(f"--json output path is a directory: {path}")
+    parent = os.path.dirname(os.path.abspath(path))
+    if not os.path.isdir(parent):
+        raise ValueError(f"--json output directory does not exist: {parent} (for {path})")
+    target = path if os.path.exists(path) else parent
+    if not os.access(target, os.W_OK):
+        raise ValueError(f"--json output path is not writable: {path}")
+
+
+def _write_text(path: str, text: str) -> None:
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+    except OSError as exc:
+        raise ValueError(f"cannot write --json file {path}: {exc.strerror or exc}") from None
+
+
 def run_batch(args: argparse.Namespace) -> str:
+    if args.json_path:
+        _check_output_path(args.json_path)
     config = _config_from(args)
     pairs = load_question_set(args.questions)
     result = execute_batch(args.pdf, config, pairs)
     if args.json_path:
         payload = json.dumps(batch_to_json(result), indent=2, ensure_ascii=False)
-        with open(args.json_path, "w", encoding="utf-8") as handle:
-            handle.write(payload + "\n")
+        _write_text(args.json_path, payload + "\n")
     return render_batch_report(result, _symbols_for(args))
 
 
@@ -318,6 +343,8 @@ def _emit(text: str) -> None:
 
 
 def run_sweep(args: argparse.Namespace) -> str:
+    if args.json_path:
+        _check_output_path(args.json_path)
     knobs = dict(
         chunk_sizes=args.chunk_size,
         overlaps=args.overlap,
@@ -341,8 +368,7 @@ def run_sweep(args: argparse.Namespace) -> str:
     if args.json_path:
         payload = json.dumps(sweep_to_json(result, args.objective), indent=2,
                              ensure_ascii=False)
-        with open(args.json_path, "w", encoding="utf-8") as handle:
-            handle.write(payload + "\n")
+        _write_text(args.json_path, payload + "\n")
     return render_sweep_table(result, args.objective, _symbols_for(args))
 
 

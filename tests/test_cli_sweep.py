@@ -107,3 +107,52 @@ def test_invalid_pair_exits_2_without_progress(monkeypatch, tmp_path, capfd, siz
     assert "Sweep:" not in captured.out and "[1/" not in captured.err
     assert "Traceback" not in captured.err
     assert seen == {}
+
+
+def _bad_paths(tmp_path):
+    return {
+        "dir": tmp_path,
+        "missing-parent": tmp_path / "nope" / "out.json",
+    }
+
+
+@pytest.mark.parametrize("kind", ["dir", "missing-parent"])
+def test_invalid_json_path_exits_2_without_work(monkeypatch, tmp_path, capfd, kind):
+    seen = {}
+    _stub(monkeypatch, seen)
+    path = _bad_paths(tmp_path)[kind]
+    code = cli.main(["sweep", "d.pdf", _questions(tmp_path), "--chunk-size", "500,800",
+                     "--json", str(path)])
+    captured = capfd.readouterr()
+    assert code == 2
+    assert "--json" in captured.err and "Traceback" not in captured.err
+    assert "Sweep:" not in captured.out and "[1/" not in captured.err
+    assert seen == {}
+    assert not (tmp_path / "nope").exists()
+
+
+def test_invalid_grid_and_json_path_one_error(monkeypatch, tmp_path, capfd):
+    seen = {}
+    _stub(monkeypatch, seen)
+    code = cli.main(["sweep", "d.pdf", _questions(tmp_path), "--chunk-size", "100",
+                     "--overlap", "200", "--json", str(tmp_path)])
+    captured = capfd.readouterr()
+    assert code == 2 and seen == {}
+    assert captured.err.count("ragdoc: error:") == 1
+    assert "Sweep:" not in captured.out
+
+
+def test_residual_write_oserror_is_clean(monkeypatch, tmp_path, capfd):
+    _stub(monkeypatch, {})
+    def boom(path, payload):
+        raise OSError(28, "No space left on device")
+    real = open
+    def fake_open(path, mode="r", *a, **k):
+        if mode == "w" and str(path).endswith("out.json"):
+            boom(path, "")
+        return real(path, mode, *a, **k)
+    monkeypatch.setattr("builtins.open", fake_open)
+    code = cli.main(["sweep", "d.pdf", _questions(tmp_path), "--json", str(tmp_path / "out.json")])
+    captured = capfd.readouterr()
+    assert code == 2 and "Traceback" not in captured.err
+    assert "cannot write --json file" in captured.err

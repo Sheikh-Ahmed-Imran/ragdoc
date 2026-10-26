@@ -65,6 +65,8 @@ class PyMuPDFLoader(Loader):
                 # as "documents"; only a real PDF is accepted here.
                 if not doc.is_pdf:
                     raise LoaderError(f"{pdf_path} is not a readable PDF: not in PDF format")
+                if doc.needs_pass:
+                    raise LoaderError(f"encrypted / password-protected PDF: {pdf_path}")
                 for index, page in enumerate(doc, start=1):
                     page_text = page.get_text()
                     start = offset

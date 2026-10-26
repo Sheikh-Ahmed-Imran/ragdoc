@@ -57,6 +57,45 @@ def test_length_changing_lowercase_keeps_offsets_valid():
     assert text[span.start : span.end] == "cd"
 
 
+def test_ligature_matches_as_normalized_with_original_span():
+    page1 = "Intro.\n"
+    text = page1 + "Annual ﬁnance report"
+    doc = _doc(
+        text,
+        [
+            PageSpan(1, CharSpan(0, len(page1))),
+            PageSpan(2, CharSpan(len(page1), len(text))),
+        ],
+    )
+    result = locate("finance", doc)
+    assert result.is_pass
+    assert result.evidence["match"] == "normalized"
+    span = result.evidence["span"]
+    assert text[span.start : span.end] == "ﬁnance"
+    assert result.evidence["page"] == 2
+    assert "ﬁnance" in result.evidence["snippet"]
+
+
+def test_identical_compatibility_form_is_exact():
+    result = locate("ﬁnance", _doc("a ﬁnance b"))
+    assert result.evidence["match"] == "exact"
+
+
+def test_fullwidth_difference_is_normalized():
+    result = locate("ABC 123", _doc("x ＡＢＣ １２３ y"))
+    assert result.is_pass
+    assert result.evidence["match"] == "normalized"
+
+
+def test_sharp_s_casefolds_to_ss():
+    text = "Straße 5"
+    result = locate("STRASSE", _doc(text))
+    assert result.is_pass
+    assert result.evidence["match"] == "normalized"
+    span = result.evidence["span"]
+    assert text[span.start : span.end] == "Straße"
+
+
 def test_absent_answer_fails():
     result = locate("missing", _doc("nothing relevant here"))
     assert result.is_fail

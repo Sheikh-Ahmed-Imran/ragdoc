@@ -21,7 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pdfplumber
-from pdfminer.pdfdocument import PDFException
+from pdfminer.pdfdocument import PDFEncryptionError, PDFException
 from pdfminer.pdfparser import PDFSyntaxError
 from pdfplumber.utils.exceptions import PdfminerException
 
@@ -62,6 +62,9 @@ class PdfPlumberLoader(Loader):
                     page_map.append(PageSpan(page=index, span=CharSpan(start, end)))
                     offset = end
         except (PDFSyntaxError, PDFException, PdfminerException) as exc:
+            cause = exc.args[0] if isinstance(exc, PdfminerException) and exc.args else exc
+            if isinstance(cause, PDFEncryptionError):  # includes PDFPasswordIncorrect
+                raise LoaderError(f"encrypted / password-protected PDF: {pdf_path}") from exc
             raise LoaderError(f"{pdf_path} is not a readable PDF: {exc}") from exc
 
         return ExtractedDoc(text="".join(parts), page_map=page_map)

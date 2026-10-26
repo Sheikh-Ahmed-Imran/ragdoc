@@ -42,6 +42,7 @@ withholds the verdict rather than letting it fall through to the next stage
 
 from __future__ import annotations
 
+import unicodedata
 from typing import Any, Optional, Sequence, Union
 
 from ragdoc.artifacts import CharSpan, CheckResult, Chunk, ExtractedDoc, Ranking
@@ -87,8 +88,8 @@ def _normalize_with_map(text: str) -> tuple[str, list[int]]:
 
 
 def _fold(c: str) -> str:
-    """Lowercase one character; may yield more than one (e.g. ``"İ"``)."""
-    return c.lower()
+    """NFKC-normalize then casefold one character; may yield several (``"ﬁ"``→``"fi"``, ``"ß"``→``"ss"``)."""
+    return unicodedata.normalize("NFKC", c).casefold()
 
 
 def _normalize(s: str) -> str:

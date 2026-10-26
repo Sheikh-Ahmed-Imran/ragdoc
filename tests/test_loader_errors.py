@@ -55,6 +55,44 @@ def test_bad_file_raises_loader_error(loader_cls, bad_pdf):
     assert "bad.pdf" in str(exc.value)
 
 
+@pytest.fixture
+def encrypted_pdf(tmp_path):
+    import pymupdf
+
+    doc = pymupdf.open()
+    doc.new_page().insert_text((72, 72), "secret text")
+    path = tmp_path / "locked.pdf"
+    doc.save(path, encryption=pymupdf.PDF_ENCRYPT_AES_256, owner_pw="owner", user_pw="user")
+    doc.close()
+    return path
+
+
+@pytest.mark.parametrize("loader_cls", LOADERS)
+def test_encrypted_pdf_raises_specific_error(loader_cls, encrypted_pdf):
+    with pytest.raises(LoaderError, match="encrypted / password-protected PDF") as exc:
+        loader_cls().load(encrypted_pdf)
+    assert "locked.pdf" in str(exc.value)
+    assert "not a readable PDF" not in str(exc.value)
+
+
+@pytest.mark.parametrize("argv", [
+    ["diagnose", "{pdf}", "q?", "a"],
+    ["compare", "{pdf}", "a"],
+    ["batch", "{pdf}", "{q}"],
+    ["sweep", "{pdf}", "{q}"],
+])
+def test_cli_reports_encrypted_error(argv, encrypted_pdf, tmp_path, capfd):
+    q = tmp_path / "q.json"
+    q.write_text(json.dumps([{"question": "q?", "expected_answer": "a"}]), encoding="utf-8")
+    argv = [a.format(pdf=encrypted_pdf, q=q) for a in argv]
+    assert cli.main(argv) == 2
+    err = capfd.readouterr().err
+    assert err.startswith("ragdoc: error: ")
+    assert "encrypted / password-protected PDF" in err
+    assert "Traceback" not in err
+    assert len(err.strip().splitlines()) == 1
+
+
 @pytest.mark.parametrize("loader_cls", LOADERS)
 def test_missing_file_still_file_not_found(loader_cls, tmp_path):
     with pytest.raises(FileNotFoundError):

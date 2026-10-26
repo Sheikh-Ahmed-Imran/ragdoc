@@ -45,6 +45,51 @@ def test_batch_json_file(monkeypatch, tmp_path, capfd):
     assert data["distribution"]["retrieval"] == 1 and data["questions"][0]["question"] == "Q?"
 
 
+def _spy_batch(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "execute_batch", lambda *a: calls.append(a) or _result())
+    monkeypatch.setattr(cli, "load_question_set", lambda *a: calls.append(a) or [])
+    return calls
+
+
+def _assert_clean_failure(code, capfd, calls, needle):
+    err = capfd.readouterr().err
+    assert code == 2
+    assert err.startswith("ragdoc: error:") and needle in err
+    assert "Traceback" not in err
+    assert calls == []
+
+
+def test_batch_json_directory_fails_before_forward_pass(monkeypatch, tmp_path, capfd):
+    calls = _spy_batch(monkeypatch)
+    code = cli.main(["batch", "doc.pdf", _questions(tmp_path), "--json", str(tmp_path)])
+    _assert_clean_failure(code, capfd, calls, str(tmp_path))
+
+
+def test_batch_json_missing_parent_fails_and_creates_nothing(monkeypatch, tmp_path, capfd):
+    calls = _spy_batch(monkeypatch)
+    target = tmp_path / "nope" / "out.json"
+    code = cli.main(["batch", "doc.pdf", _questions(tmp_path), "--json", str(target)])
+    _assert_clean_failure(code, capfd, calls, str(target))
+    assert not (tmp_path / "nope").exists()
+
+
+def test_batch_json_not_writable_fails_before_forward_pass(monkeypatch, tmp_path, capfd):
+    calls = _spy_batch(monkeypatch)
+    monkeypatch.setattr(cli.os, "access", lambda *a: False)
+    target = tmp_path / "out.json"
+    code = cli.main(["batch", "doc.pdf", _questions(tmp_path), "--json", str(target)])
+    _assert_clean_failure(code, capfd, calls, str(target))
+
+
+def test_batch_json_residual_oserror_is_clean(monkeypatch, tmp_path, capfd):
+    _stub(monkeypatch, {})
+    monkeypatch.setattr(cli, "_check_output_path", lambda path: None)
+    code = cli.main(["batch", "doc.pdf", _questions(tmp_path), "--json", str(tmp_path)])
+    err = capfd.readouterr().err
+    assert code == 2 and err.startswith("ragdoc: error:") and "Traceback" not in err
+
+
 def test_batch_bad_question_set_exits_2(tmp_path, capfd):
     bad = tmp_path / "bad.json"
     bad.write_text("{}", encoding="utf-8")

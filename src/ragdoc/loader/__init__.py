@@ -58,7 +58,10 @@ class Loader(ABC):
       and the same map.
     * :meth:`load` raises :class:`LoaderError` when the file exists but cannot be
       read or parsed as a PDF, and :class:`FileNotFoundError` when it does not
-      exist.
+      exist. An encrypted / password-protected PDF is a distinct sub-case: the
+      :class:`LoaderError` message says ``encrypted / password-protected PDF``
+      rather than the generic ``not a readable PDF``. Loaders never attempt a
+      password or decryption.
 
     :attr:`name` identifies the implementation and is the value recorded in
     :attr:`RunConfig.loader`; a page position is only meaningful paired with the
