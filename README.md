@@ -16,6 +16,16 @@ evidence behind the verdict.
 
 It is a headless, offline, deterministic CLI. No API keys, no LLM calls, no telemetry.
 
+## Project status
+
+ragdoc is in **beta** (`0.x`). Its attribution engine and CLI are covered by an
+extensive automated test suite — unit tests plus integration tests against fixture
+PDFs that exercise each stage and every failure mode. What is still maturing is
+*breadth*: validation across a wide range of real-world PDFs is ongoing, so on unusual
+layouts or heavily structured documents a verdict may warrant a careful read. Treat the
+output as strong, evidence-backed signal rather than an oracle, and expect the occasional
+rough edge before `1.0`. Reports of PDFs it gets wrong are especially welcome.
+
 ## How it works
 
 `ragdoc` runs your document through the forward pipeline once, then runs a chain of
