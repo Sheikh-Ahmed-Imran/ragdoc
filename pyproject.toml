@@ -4,19 +4,31 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ragdoc"
-version = "0.0.0"
+version = "0.1.0"
 description = "Headless diagnostic for PDF RAG pipelines: attributes a lost answer to the pipeline stage that lost it."
 readme = "README.md"
-# Pinned to 3.12: the embedding stack used from T-005 (sentence-transformers /
-# torch) does not reliably install on 3.14. Confirmed with the author.
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ahmed Imran" }]
+# Pinned to 3.12: the embedding stack (sentence-transformers / torch) does not
+# reliably install on 3.14.
 requires-python = ">=3.12,<3.13"
-# The loader (T-002) depends on PyMuPDF for extraction. The indexer (T-005) adds
-# the local embedding stack: sentence-transformers runs the model locally and
-# only touches the network to download the model the first time, after which a
-# run is offline; numpy backs the retriever's brute-force cosine scoring. The
-# types in T-001 are pure stdlib, so a heavy import stays confined to the stage
-# that needs it (the indexer imports sentence-transformers lazily).
-dependencies = ["PyMuPDF>=1.24", "pdfplumber>=0.10", "pypdf>=4.0", "sentence-transformers>=2.2", "numpy>=1.24"]
+# PyMuPDF / pdfplumber / pypdf extract the PDF. sentence-transformers runs the
+# embedding model locally, downloading it only on first use (offline thereafter);
+# numpy backs the retriever's brute-force cosine scoring. The embedding stack is
+# imported lazily, so the heavy import stays confined to the indexer.
+dependencies = ["PyMuPDF>=1.24", "pdfplumber>=0.10", "pypdf>=6.21.2", "sentence-transformers>=2.2", "numpy>=1.24"]
+keywords = ["rag", "pdf", "retrieval-augmented-generation", "embeddings", "llm", "diagnostics", "attribution"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: General",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
