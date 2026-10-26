@@ -112,9 +112,13 @@ def test_table_shows_varied_knobs_counts_and_marks_winner():
     lines = render_sweep_table(RESULT).splitlines()
     assert "chunk" in lines[0] and "overlap" not in lines[0]
     assert "no-failure" in lines[0] and "MRR" in lines[0] and "hit-rate@k" in lines[0]
-    rows = lines[1:4]
+    assert set(lines[1].replace(" ", "")) == {"-"}  # separator rule
+    assert lines[0].startswith("  ") and lines[1].startswith("  ")
+    rows = lines[2:5]
     assert [r.startswith("*") for r in rows] == [False, True, False]
-    assert "5/6" in rows[1]  # 5 survivors of 6 results (1 retrieval + 5)
+    assert "5/6" in rows[1]
+    # numeric columns right-align: every data line ends in the same column
+    assert len({len(r) for r in [lines[0], lines[1], *rows]}) == 1  # 5 survivors of 6 results (1 retrieval + 5)
     assert "Winner by no-failure" in lines[-1] and "chunk 800" in lines[-1]
 
 

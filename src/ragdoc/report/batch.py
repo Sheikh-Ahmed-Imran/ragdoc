@@ -24,6 +24,7 @@ import statistics
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 from ragdoc.report import format_metric, precision_at_k, reciprocal_rank
+from ragdoc.report._table import LEFT, RIGHT, render_table
 from ragdoc.report.symbols import UNICODE, Symbols
 
 if TYPE_CHECKING:
@@ -126,9 +127,12 @@ def render_batch_report(batch: "BatchResult", symbols: Symbols = UNICODE) -> str
     """Render the distribution (headline) then one line per question."""
     total = len(batch.results)
     lines = [f"Failure distribution ({total} question{'s' if total != 1 else ''}):"]
+    dist_rows = []
     for bucket, count in _distribution(batch).items():
         pct = (100.0 * count / total) if total else 0.0
-        lines.append(f"  {bucket:<11} {count:>4}  {pct:5.1f}%")
+        dist_rows.append((bucket, str(count), f"{pct:.1f}%"))
+    table = render_table(("stage", "count", "share"), dist_rows, (LEFT, RIGHT, RIGHT))
+    lines += ["  " + text for text in table]
 
     lines += [""] + _metrics_lines(retrieval_metrics(batch))
     lines += ["", "Questions:"]

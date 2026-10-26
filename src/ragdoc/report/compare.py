@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Sequence
 
+from ragdoc.report._table import LEFT, RIGHT, render_table
 from ragdoc.report.symbols import UNICODE, Symbols
 
 if TYPE_CHECKING:
@@ -25,7 +26,8 @@ if TYPE_CHECKING:
 __all__ = ["render_comparison"]
 
 _HEADERS = ("loader", "result", "page", "match", "chars", "pages")
-_UNEVALUATED = "? not evaluated"
+_ALIGNS = (LEFT, LEFT, LEFT, LEFT, RIGHT, RIGHT)
+_UNEVALUATED ="? not evaluated"
 
 
 def _row(result: "LoaderResult", symbols: Symbols) -> tuple[str, ...]:
@@ -95,14 +97,7 @@ def render_comparison(
     """
     if not results:
         return "No loaders were compared."
-    rows = [_HEADERS] + [_row(r, symbols) for r in results]
-    widths = [max(len(row[i]) for row in rows) for i in range(len(_HEADERS))]
-
-    def fmt(row: tuple[str, ...]) -> str:
-        return "  ".join(cell.ljust(w) for cell, w in zip(row, widths)).rstrip()
-
-    lines = [fmt(rows[0]), "  ".join("-" * w for w in widths)]
-    lines += [fmt(r) for r in rows[1:]]
+    lines = render_table(_HEADERS, [_row(r, symbols) for r in results], _ALIGNS)
     advisory = [
         f"{r.loader}: {len(r.empty_pages)} page(s) had no extractable text: "
         + ", ".join(f"p.{n}" for n in r.empty_pages)

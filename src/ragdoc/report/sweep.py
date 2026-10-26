@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional, Sequence
 
+from ragdoc.report._table import LEFT, RIGHT, render_table
 from ragdoc.report.batch import retrieval_metrics
 from ragdoc.report.symbols import UNICODE, Symbols
 
@@ -37,6 +38,8 @@ _KNOBS = (
     ("embedding_model", "model"),
     ("prepend_section_context", "prepend"),
 )
+
+_TEXT_KNOBS = ("embedding_model", "prepend_section_context")
 
 _CONFIG_FIELDS = (
     "loader", "chunk_size", "overlap", "prepend_section_context", "embedding_model", "top_k",
@@ -116,13 +119,13 @@ def render_sweep_table(
                 _fmt(metrics["hit_rate"], symbols),
             ]
         )
-    widths = [max(len(headers[c]), *(len(r[c]) for r in rows)) for c in range(len(headers))]
-
-    def line(mark: str, cells: Sequence[str]) -> str:
-        return f"{mark} " + "  ".join(c.ljust(w) for c, w in zip(cells, widths)).rstrip()
-
-    lines = [line(" ", headers)]
-    lines += [line("*" if i == winner else " ", row) for i, row in enumerate(rows)]
+    aligns = [LEFT if attr in _TEXT_KNOBS else RIGHT for attr, _ in knobs] + [RIGHT] * 3
+    table = render_table(headers, rows, aligns)
+    # Header and rule are offset to sit under the mark column; data lines carry the mark.
+    lines = ["  " + table[0], "  " + table[1]]
+    lines += [
+        ("* " if i == winner else "  ") + text for i, text in enumerate(table[2:])
+    ]
     best = result.entries[winner].config
     described = ", ".join(f"{header} {_cell(getattr(best, attr))}" for attr, header in knobs)
     survived, mrr = rows[winner][len(knobs)], rows[winner][len(knobs) + 1]

@@ -114,3 +114,17 @@ def test_verbose_false_equals_default_with_found_and_missed():
     results = [_find(), LoaderResult("pdfplumber", False, True, None, None, 5000, 2, text_head=_HEAD)]
     assert render_comparison(results, verbose=False) == render_comparison(results)
     assert "THE ANSWER" not in render_comparison(results)
+
+
+def test_numeric_columns_right_aligned_with_rule():
+    out = render_comparison(_RESULTS).splitlines()
+    assert set(out[1].replace(" ", "")) == {"-"}
+    assert len({len(line) for line in out[:5]}) == 1  # chars/pages end flush
+
+
+def test_symbol_cells_stay_aligned_in_both_modes():
+    from ragdoc.report.symbols import ASCII, UNICODE
+
+    for symbols in (UNICODE, ASCII):
+        out = render_comparison(_RESULTS, symbols=symbols).splitlines()
+        assert len({len(line) for line in out[:5]}) == 1

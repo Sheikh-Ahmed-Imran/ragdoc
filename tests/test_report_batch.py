@@ -83,3 +83,15 @@ def test_json_retrieval_metrics():
     assert m["rank_median"] == 3
     assert abs(m["rank_p90"] - 8.2) < 1e-9
     json.dumps(m)
+
+
+def test_distribution_has_header_rule_and_right_aligned_numbers():
+    lines = render_batch_report(_batch()).splitlines()
+    header, rule = lines[1], lines[2]
+    assert header.split() == ["stage", "count", "share"]
+    assert set(rule.replace(" ", "")) == {"-"}
+    rows = lines[3 : 3 + len(BUCKETS)]
+    assert sum(int(r.split()[1]) for r in rows) == 4
+    assert any(r.split() == ["retrieval", "2", "50.0%"] for r in rows)
+    # count and share columns end flush with their header
+    assert len({len(r) for r in [header, rule, *rows]}) == 1
