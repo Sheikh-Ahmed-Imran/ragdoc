@@ -30,6 +30,11 @@ classifiers = [
     "Topic :: Text Processing :: General",
 ]
 
+[project.urls]
+Homepage = "https://ahmedimran.dev"
+Source = "https://github.com/Sheikh-Ahmed-Imran/rag-doc"
+Issues = "https://github.com/Sheikh-Ahmed-Imran/rag-doc/issues"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
