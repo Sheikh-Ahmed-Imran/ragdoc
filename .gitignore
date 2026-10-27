@@ -23,3 +23,8 @@ tests/images/
 
 # sdist build leftover (python -m build)
 /ragdoc-[0-9]*/
+
+# Internal engineering workflow + architecture docs — kept local, not published
+.ai/
+specs/
+docs/
