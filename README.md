@@ -1,7 +1,7 @@
 # ragdoc
 
-[![PyPI](https://img.shields.io/pypi/v/ragdoc.svg)](https://pypi.org/project/ragdoc/)
-[![Python](https://img.shields.io/pypi/pyversions/ragdoc.svg)](https://pypi.org/project/ragdoc/)
+[![PyPI](https://img.shields.io/pypi/v/ragdoc.svg?cacheSeconds=3600)](https://pypi.org/project/ragdoc/)
+[![Python](https://img.shields.io/pypi/pyversions/ragdoc.svg?cacheSeconds=3600)](https://pypi.org/project/ragdoc/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Find out which stage of your PDF RAG pipeline lost the answer.**
